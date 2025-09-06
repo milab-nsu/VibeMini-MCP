@@ -36,6 +36,9 @@ API_CONFIG = {
     "GET_SCHEMA_URL": "https://api.seliseblocks.com/graphql/v1/schemas",
     "UPDATE_CONFIG_URL": "https://api.seliseblocks.com/authentication/v1/Configuration/Update",
     "GET_CONFIG_URL": "https://api.seliseblocks.com/authentication/v1/Configuration/Get",
+    "CAPTCHA_SAVE_URL": "https://api.seliseblocks.com/captcha/v1/Configuration/Save",
+    "CAPTCHA_LIST_URL": "https://api.seliseblocks.com/captcha/v1/Configuration/Gets",
+    "CAPTCHA_UPDATE_STATUS_URL": "https://api.seliseblocks.com/captcha/v1/Configuration/UpdateStatus",
     "HEADERS": {
         "x-blocks-key": "d7e5554c758541db8a18694b64ef423d",
         "Origin": "https://cloud.seliseblocks.com",
@@ -1376,6 +1379,288 @@ async def get_global_state() -> str:
             "project_name": app_state["project_name"]
         }
     }, indent=2)
+
+
+@mcp.tool()
+async def save_captcha_config(
+    provider: str,
+    site_key: str,
+    secret_key: str,
+    project_key: str = "",
+    is_enable: bool = False
+) -> str:
+    """
+    Save CAPTCHA configuration for Google reCAPTCHA or hCaptcha.
+    
+    Args:
+        provider: CAPTCHA provider - "recaptcha" for Google reCAPTCHA or "hcaptcha" for hCaptcha
+        site_key: Public site key from CAPTCHA provider console
+        secret_key: Private secret key from CAPTCHA provider console
+        project_key: Project key (tenant ID). Uses global tenant_id if not provided
+        is_enable: Whether to enable the configuration immediately (default: False)
+    
+    Returns:
+        JSON string with CAPTCHA configuration save result
+    """
+    try:
+        # Check if authenticated
+        if not is_token_valid():
+            return json.dumps({
+                "status": "error",
+                "message": "Authentication required. Please login first using the login tool."
+            }, indent=2)
+        
+        # Use global tenant_id if project_key is not provided
+        if not project_key:
+            if not app_state["tenant_id"]:
+                return json.dumps({
+                    "status": "error",
+                    "message": "No project key provided and no tenant ID in global state. Please run get_projects or provide project_key."
+                }, indent=2)
+            project_key = app_state["tenant_id"]
+        
+        # Validate provider
+        if provider not in ["recaptcha", "hcaptcha"]:
+            return json.dumps({
+                "status": "error",
+                "message": "Invalid provider. Must be 'recaptcha' for Google reCAPTCHA or 'hcaptcha' for hCaptcha."
+            }, indent=2)
+        
+        headers = get_auth_headers()
+        
+        payload = {
+            "projectKey": project_key,
+            "isEnable": is_enable,
+            "provider": provider,
+            "captchaKey": site_key,
+            "captchaSecret": secret_key,
+            "captchaGenerator": ""
+        }
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                API_CONFIG["CAPTCHA_SAVE_URL"],
+                headers=headers,
+                json=payload,
+                timeout=30.0
+            )
+            response.raise_for_status()
+            save_data = response.json()
+        
+        if save_data.get("isSuccess"):
+            # Get updated configurations to show the result
+            try:
+                list_result = await list_captcha_configs(project_key)
+                list_data = json.loads(list_result)
+                updated_configs = list_data.get("configurations", []) if list_data.get("status") == "success" else []
+            except Exception:
+                updated_configs = []
+            
+            result = {
+                "status": "success",
+                "message": f"{provider.capitalize()} CAPTCHA configuration saved successfully",
+                "config_details": {
+                    "provider": provider,
+                    "project_key": project_key,
+                    "is_enabled": is_enable,
+                    "site_key": site_key[:20] + "..." if len(site_key) > 20 else site_key
+                },
+                "response": save_data,
+                "updated_configurations": updated_configs
+            }
+        else:
+            result = {
+                "status": "error", 
+                "message": "Failed to save CAPTCHA configuration",
+                "errors": save_data.get("errors"),
+                "response": save_data
+            }
+        
+        return json.dumps(result, indent=2)
+        
+    except httpx.HTTPStatusError as e:
+        return json.dumps({
+            "status": "error",
+            "message": f"HTTP error saving CAPTCHA config: {e.response.status_code}",
+            "details": e.response.text
+        }, indent=2)
+    
+    except Exception as e:
+        return json.dumps({
+            "status": "error",
+            "message": f"Error saving CAPTCHA config: {str(e)}"
+        }, indent=2)
+
+
+@mcp.tool()
+async def list_captcha_configs(project_key: str = "") -> str:
+    """
+    List all CAPTCHA configurations for a project.
+    
+    Args:
+        project_key: Project key (tenant ID). Uses global tenant_id if not provided
+    
+    Returns:
+        JSON string with list of CAPTCHA configurations
+    """
+    try:
+        # Check if authenticated
+        if not is_token_valid():
+            return json.dumps({
+                "status": "error",
+                "message": "Authentication required. Please login first using the login tool."
+            }, indent=2)
+        
+        # Use global tenant_id if project_key is not provided
+        if not project_key:
+            if not app_state["tenant_id"]:
+                return json.dumps({
+                    "status": "error",
+                    "message": "No project key provided and no tenant ID in global state. Please run get_projects or provide project_key."
+                }, indent=2)
+            project_key = app_state["tenant_id"]
+        
+        headers = get_auth_headers()
+        params = {"ProjectKey": project_key}
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                API_CONFIG["CAPTCHA_LIST_URL"],
+                headers=headers,
+                params=params,
+                timeout=30.0
+            )
+            response.raise_for_status()
+            configs_data = response.json()
+        
+        configurations = configs_data.get("configurations", [])
+        
+        result = {
+            "status": "success",
+            "message": f"Found {len(configurations)} CAPTCHA configuration(s)",
+            "project_key": project_key,
+            "configurations": configurations,
+            "summary": []
+        }
+        
+        # Add summary for easier reading
+        for config in configurations:
+            status = "Enabled" if config.get("isEnable") else "Disabled"
+            result["summary"].append({
+                "provider": config.get("provider"),
+                "status": status,
+                "item_id": config.get("itemId"),
+                "created_date": config.get("createdDate")
+            })
+        
+        return json.dumps(result, indent=2)
+        
+    except httpx.HTTPStatusError as e:
+        return json.dumps({
+            "status": "error",
+            "message": f"HTTP error listing CAPTCHA configs: {e.response.status_code}",
+            "details": e.response.text
+        }, indent=2)
+    
+    except Exception as e:
+        return json.dumps({
+            "status": "error",
+            "message": f"Error listing CAPTCHA configs: {str(e)}"
+        }, indent=2)
+
+
+@mcp.tool()
+async def update_captcha_status(item_id: str, is_enable: bool, project_key: str = "") -> str:
+    """
+    Enable or disable a CAPTCHA configuration.
+    
+    Args:
+        item_id: The ID of the CAPTCHA configuration to update
+        is_enable: True to enable, False to disable the configuration
+        project_key: Project key (tenant ID). Uses global tenant_id if not provided
+    
+    Returns:
+        JSON string with status update result
+    """
+    try:
+        # Check if authenticated
+        if not is_token_valid():
+            return json.dumps({
+                "status": "error",
+                "message": "Authentication required. Please login first using the login tool."
+            }, indent=2)
+        
+        # Use global tenant_id if project_key is not provided
+        if not project_key:
+            if not app_state["tenant_id"]:
+                return json.dumps({
+                    "status": "error",
+                    "message": "No project key provided and no tenant ID in global state. Please run get_projects or provide project_key."
+                }, indent=2)
+            project_key = app_state["tenant_id"]
+        
+        headers = get_auth_headers()
+        
+        payload = {
+            "projectKey": project_key,
+            "isEnable": is_enable,
+            "itemId": item_id
+        }
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                API_CONFIG["CAPTCHA_UPDATE_STATUS_URL"],
+                headers=headers,
+                json=payload,
+                timeout=30.0
+            )
+            response.raise_for_status()
+            update_data = response.json()
+        
+        if update_data.get("isSuccess"):
+            status_text = "enabled" if is_enable else "disabled"
+            
+            # Get updated configurations to confirm the change
+            try:
+                list_result = await list_captcha_configs(project_key)
+                list_data = json.loads(list_result)
+                updated_configs = list_data.get("configurations", []) if list_data.get("status") == "success" else []
+            except Exception:
+                updated_configs = []
+            
+            result = {
+                "status": "success",
+                "message": f"CAPTCHA configuration {status_text} successfully",
+                "config_details": {
+                    "item_id": item_id,
+                    "project_key": project_key,
+                    "is_enabled": is_enable
+                },
+                "response": update_data,
+                "updated_configurations": updated_configs
+            }
+        else:
+            result = {
+                "status": "error",
+                "message": "Failed to update CAPTCHA configuration status",
+                "errors": update_data.get("errors"),
+                "response": update_data
+            }
+        
+        return json.dumps(result, indent=2)
+        
+    except httpx.HTTPStatusError as e:
+        return json.dumps({
+            "status": "error",
+            "message": f"HTTP error updating CAPTCHA status: {e.response.status_code}",
+            "details": e.response.text
+        }, indent=2)
+    
+    except Exception as e:
+        return json.dumps({
+            "status": "error",
+            "message": f"Error updating CAPTCHA status: {str(e)}"
+        }, indent=2)
 
 
 async def get_tenant_id(tenant_group_id: str, project_name: str) -> Optional[str]:
