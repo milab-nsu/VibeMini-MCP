@@ -39,6 +39,8 @@ API_CONFIG = {
     "CAPTCHA_SAVE_URL": "https://api.seliseblocks.com/captcha/v1/Configuration/Save",
     "CAPTCHA_LIST_URL": "https://api.seliseblocks.com/captcha/v1/Configuration/Gets",
     "CAPTCHA_UPDATE_STATUS_URL": "https://api.seliseblocks.com/captcha/v1/Configuration/UpdateStatus",
+    "IAM_GET_ROLES_URL": "https://api.seliseblocks.com/iam/v1/Resource/GetRoles",
+    "IAM_CREATE_ROLE_URL": "https://api.seliseblocks.com/iam/v1/Resource/CreateRole",
     "HEADERS": {
         "x-blocks-key": "d7e5554c758541db8a18694b64ef423d",
         "Origin": "https://cloud.seliseblocks.com",
@@ -1660,6 +1662,211 @@ async def update_captcha_status(item_id: str, is_enable: bool, project_key: str 
         return json.dumps({
             "status": "error",
             "message": f"Error updating CAPTCHA status: {str(e)}"
+        }, indent=2)
+
+
+@mcp.tool()
+async def list_roles(
+    project_key: str = "",
+    page: int = 0,
+    page_size: int = 10,
+    search: str = "",
+    sort_by: str = "Name",
+    sort_descending: bool = False
+) -> str:
+    """
+    List all roles for a project.
+    
+    Args:
+        project_key: Project key (tenant ID). Uses global tenant_id if not provided
+        page: Page number (default: 0)
+        page_size: Number of items per page (default: 10)
+        search: Search filter (default: "")
+        sort_by: Field to sort by (default: "Name")
+        sort_descending: Sort order (default: false)
+    
+    Returns:
+        JSON string with role list result
+    """
+    try:
+        # Check if authenticated
+        if not is_token_valid():
+            return json.dumps({
+                "status": "error",
+                "message": "Authentication required. Please login first using the login tool."
+            }, indent=2)
+        
+        # Use global tenant_id if project_key is not provided
+        if not project_key:
+            if not app_state["tenant_id"]:
+                return json.dumps({
+                    "status": "error",
+                    "message": "No project key provided and no tenant ID in global state. Please run get_projects or provide project_key."
+                }, indent=2)
+            project_key = app_state["tenant_id"]
+        
+        headers = get_auth_headers()
+        
+        payload = {
+            "projectKey": project_key,
+            "page": page,
+            "pageSize": page_size,
+            "filter": {
+                "search": search
+            },
+            "sort": {
+                "property": sort_by,
+                "isDescending": sort_descending
+            }
+        }
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                API_CONFIG["IAM_GET_ROLES_URL"],
+                headers=headers,
+                json=payload,
+                timeout=30.0
+            )
+            response.raise_for_status()
+            roles_data = response.json()
+        
+        roles = roles_data.get("data", [])
+        total_count = roles_data.get("totalCount", 0)
+        
+        result = {
+            "status": "success",
+            "message": f"Found {len(roles)} role(s) (total: {total_count})",
+            "project_key": project_key,
+            "total_count": total_count,
+            "roles": roles,
+            "summary": []
+        }
+        
+        # Add summary for easier reading
+        for role in roles:
+            result["summary"].append({
+                "name": role.get("name"),
+                "slug": role.get("slug"),
+                "description": role.get("description"),
+                "permissions_count": role.get("count", 0),
+                "item_id": role.get("itemId"),
+                "created_date": role.get("createdDate")
+            })
+        
+        return json.dumps(result, indent=2)
+        
+    except httpx.HTTPStatusError as e:
+        return json.dumps({
+            "status": "error",
+            "message": f"HTTP error listing roles: {e.response.status_code}",
+            "details": e.response.text
+        }, indent=2)
+    
+    except Exception as e:
+        return json.dumps({
+            "status": "error",
+            "message": f"Error listing roles: {str(e)}"
+        }, indent=2)
+
+
+@mcp.tool()
+async def create_role(
+    name: str,
+    description: str,
+    slug: str,
+    project_key: str = ""
+) -> str:
+    """
+    Create a new role.
+    
+    Args:
+        name: Role name
+        description: Role description
+        slug: Role slug (URL-friendly identifier)
+        project_key: Project key (tenant ID). Uses global tenant_id if not provided
+    
+    Returns:
+        JSON string with role creation result
+    """
+    try:
+        # Check if authenticated
+        if not is_token_valid():
+            return json.dumps({
+                "status": "error",
+                "message": "Authentication required. Please login first using the login tool."
+            }, indent=2)
+        
+        # Use global tenant_id if project_key is not provided
+        if not project_key:
+            if not app_state["tenant_id"]:
+                return json.dumps({
+                    "status": "error",
+                    "message": "No project key provided and no tenant ID in global state. Please run get_projects or provide project_key."
+                }, indent=2)
+            project_key = app_state["tenant_id"]
+        
+        headers = get_auth_headers()
+        
+        payload = {
+            "name": name,
+            "description": description,
+            "slug": slug,
+            "projectKey": project_key
+        }
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                API_CONFIG["IAM_CREATE_ROLE_URL"],
+                headers=headers,
+                json=payload,
+                timeout=30.0
+            )
+            response.raise_for_status()
+            create_data = response.json()
+        
+        if create_data.get("isSuccess"):
+            # Get updated role list to show the result
+            try:
+                list_result = await list_roles(project_key)
+                list_data = json.loads(list_result)
+                updated_roles = list_data.get("roles", []) if list_data.get("status") == "success" else []
+            except Exception:
+                updated_roles = []
+            
+            result = {
+                "status": "success",
+                "message": f"Role '{name}' created successfully",
+                "role_details": {
+                    "name": name,
+                    "description": description,
+                    "slug": slug,
+                    "project_key": project_key,
+                    "item_id": create_data.get("itemId")
+                },
+                "response": create_data,
+                "updated_roles": updated_roles
+            }
+        else:
+            result = {
+                "status": "error",
+                "message": "Failed to create role",
+                "errors": create_data.get("errors"),
+                "response": create_data
+            }
+        
+        return json.dumps(result, indent=2)
+        
+    except httpx.HTTPStatusError as e:
+        return json.dumps({
+            "status": "error",
+            "message": f"HTTP error creating role: {e.response.status_code}",
+            "details": e.response.text
+        }, indent=2)
+    
+    except Exception as e:
+        return json.dumps({
+            "status": "error",
+            "message": f"Error creating role: {str(e)}"
         }, indent=2)
 
 
