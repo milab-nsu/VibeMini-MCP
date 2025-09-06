@@ -1,0 +1,313 @@
+Select a definition
+
+Api v1
+Captcha Service
+ v1 
+OAS 3.0
+https://dev-api.seliseblocks.com/captcha/v1/swagger/v1/swagger.json
+Provides APIs for bot detection and abuse prevention. Supports integration with reCAPTCHA and hCaptcha, ensuring requests originate from real users before granting access to application resources.
+
+
+Authorize
+Captcha
+
+
+POST
+/captcha/v1/Captcha/Create
+
+
+Parameters
+Try it out
+No parameters
+
+Request body
+
+application/json
+Example Value
+Schema
+{
+  "configurationName": "string"
+}
+Responses
+Code	Description	Links
+200	
+OK
+
+Media type
+
+text/plain
+Controls Accept header.
+Example Value
+Schema
+{
+  "errors": {
+    "additionalProp1": "string",
+    "additionalProp2": "string",
+    "additionalProp3": "string"
+  },
+  "isSuccess": true,
+  "itemId": "string",
+  "id": "string",
+  "captcha": "string"
+}
+No links
+
+POST
+/captcha/v1/Captcha/Submit
+
+
+Parameters
+Try it out
+No parameters
+
+Request body
+
+application/json
+Example Value
+Schema
+{
+  "id": "string",
+  "value": "string"
+}
+Responses
+Code	Description	Links
+200	
+OK
+
+Media type
+
+text/plain
+Controls Accept header.
+Example Value
+Schema
+{
+  "errors": {
+    "additionalProp1": "string",
+    "additionalProp2": "string",
+    "additionalProp3": "string"
+  },
+  "isSuccess": true,
+  "itemId": "string",
+  "verificationCode": "string"
+}
+No links
+
+GET
+/captcha/v1/Captcha/Verify
+
+
+Parameters
+Try it out
+Name	Description
+VerificationCode
+string
+(query)
+VerificationCode
+ConfigurationName
+string
+(query)
+ConfigurationName
+Responses
+Code	Description	Links
+200	
+OK
+
+Media type
+
+text/plain
+Controls Accept header.
+Example Value
+Schema
+{
+  "errors": {
+    "additionalProp1": "string",
+    "additionalProp2": "string",
+    "additionalProp3": "string"
+  },
+  "isSuccess": true,
+  "itemId": "string",
+  "verified": true,
+  "hostName": "string"
+}
+No links
+Configuration
+
+
+POST
+/captcha/v1/Configuration/Save
+
+
+Parameters
+Try it out
+No parameters
+
+Request body
+
+application/json
+Example Value
+Schema
+{
+  "captchaKey": "string",
+  "captchaSecret": "string",
+  "provider": "string",
+  "captchaGenerator": "string",
+  "isEnable": true,
+  "projectKey": "string"
+}
+Responses
+Code	Description	Links
+200	
+OK
+
+Media type
+
+text/plain
+Controls Accept header.
+Example Value
+Schema
+{
+  "errors": {
+    "additionalProp1": "string",
+    "additionalProp2": "string",
+    "additionalProp3": "string"
+  },
+  "isSuccess": true,
+  "itemId": "string"
+}
+No links
+
+POST
+/captcha/v1/Configuration/UpdateStatus
+
+
+Parameters
+Try it out
+No parameters
+
+Request body
+
+application/json
+Example Value
+Schema
+{
+  "itemId": "string",
+  "isEnable": true,
+  "projectKey": "string"
+}
+Responses
+Code	Description	Links
+200	
+OK
+
+Media type
+
+text/plain
+Controls Accept header.
+Example Value
+Schema
+{
+  "errors": {
+    "additionalProp1": "string",
+    "additionalProp2": "string",
+    "additionalProp3": "string"
+  },
+  "isSuccess": true,
+  "itemId": "string"
+}
+No links
+
+GET
+/captcha/v1/Configuration/Get
+
+
+Parameters
+Try it out
+Name	Description
+ProviderName
+string
+(query)
+ProviderName
+ProjectKey
+string
+(query)
+ProjectKey
+Responses
+Code	Description	Links
+200	
+OK
+
+Media type
+
+text/plain
+Controls Accept header.
+Example Value
+Schema
+{
+  "errors": {
+    "additionalProp1": "string",
+    "additionalProp2": "string",
+    "additionalProp3": "string"
+  },
+  "isSuccess": true
+}
+No links
+
+GET
+/captcha/v1/Configuration/Gets
+
+
+Parameters
+Try it out
+Name	Description
+ProjectKey
+string
+(query)
+ProjectKey
+Responses
+Code	Description	Links
+200	
+OK
+
+Media type
+
+text/plain
+Controls Accept header.
+Example Value
+Schema
+{
+  "configurations": [
+    {
+      "itemId": "string",
+      "createdDate": "2025-09-06T17:55:37.043Z",
+      "lastUpdatedDate": "2025-09-06T17:55:37.043Z",
+      "createdBy": "string",
+      "language": "string",
+      "lastUpdatedBy": "string",
+      "organizationIds": [
+        "string"
+      ],
+      "tags": [
+        "string"
+      ],
+      "captchaKey": "string",
+      "captchaSecret": "string",
+      "provider": "string",
+      "captchaGenerator": "string",
+      "isEnable": true
+    }
+  ]
+}
+No links
+
+Schemas
+BaseMutationResponse
+BaseResponse
+CaptchaConfiguration
+CaptchaConfigurationsResponse
+Configuration
+CreateCaptchaRequest
+CreateCaptchaRequestResponse
+SubmitCaptchaRequest
+SubmitCaptchaRequestResponse
+UpdateStatusRequest
+VerifyCaptchaRequestResponse
