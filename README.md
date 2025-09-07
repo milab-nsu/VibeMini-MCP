@@ -246,18 +246,6 @@ All tools return JSON responses with:
 
 During development, we discovered critical security gaps in Selise Cloud's IAM implementation:
 
-### ⚠️ **Important Security Findings**
-- **Permission Enforcement**: Selise's IAM system is purely cosmetic for UI organization
-- **No Backend Validation**: `resource` and `resourceGroup` fields accept arbitrary strings
-- **API Security**: Only validates Bearer tokens, no role/permission middleware checks
-- **Impact**: Any authenticated user can access any API endpoint regardless of assigned permissions
-
-### 🔒 **Defensive Measures Available**
-Despite these gaps, this MCP server provides complete IAM tooling for:
-- Role-based access control UI development
-- Permission system organization and management
-- Future-proofing when Selise addresses enforcement gaps
-
 ## API Endpoints
 
 The server communicates with the following Selise Cloud API endpoints:
