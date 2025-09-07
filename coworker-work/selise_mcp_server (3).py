@@ -36,16 +36,6 @@ API_CONFIG = {
     "GET_SCHEMA_URL": "https://api.seliseblocks.com/graphql/v1/schemas",
     "UPDATE_CONFIG_URL": "https://api.seliseblocks.com/authentication/v1/Configuration/Update",
     "GET_CONFIG_URL": "https://api.seliseblocks.com/authentication/v1/Configuration/Get",
-    "CAPTCHA_SAVE_URL": "https://api.seliseblocks.com/captcha/v1/Configuration/Save",
-    "CAPTCHA_LIST_URL": "https://api.seliseblocks.com/captcha/v1/Configuration/Gets",
-    "CAPTCHA_UPDATE_STATUS_URL": "https://api.seliseblocks.com/captcha/v1/Configuration/UpdateStatus",
-    "IAM_GET_ROLES_URL": "https://api.seliseblocks.com/iam/v1/Resource/GetRoles",
-    "IAM_CREATE_ROLE_URL": "https://api.seliseblocks.com/iam/v1/Resource/CreateRole",
-    "IAM_GET_PERMISSIONS_URL": "https://api.seliseblocks.com/iam/v1/Resource/GetPermissions",
-    "IAM_CREATE_PERMISSION_URL": "https://api.seliseblocks.com/iam/v1/Resource/CreatePermission",
-    "IAM_UPDATE_PERMISSION_URL": "https://api.seliseblocks.com/iam/v1/Resource/UpdatePermission",
-    "IAM_GET_RESOURCE_GROUPS_URL": "https://api.seliseblocks.com/iam/v1/Resource/GetResourceGroups",
-    "IAM_SET_ROLES_URL": "https://api.seliseblocks.com/iam/v1/Resource/SetRoles",
     "MFA_CONFIG_URL": "https://api.seliseblocks.com/mfa/v1/Configuration/Save",
     "DATA_GATEWAY_URL": "https://api.seliseblocks.com/graphql/v1/configurations",
     "SAVE_SSO_URL": "https://api.seliseblocks.com/authentication/v1/Social/SaveSsoCredential",
@@ -1370,1170 +1360,22 @@ async def get_auth_status() -> str:
 
 
 @mcp.tool()
-async def get_global_state() -> str:
-    """
-    Get the current global state including authentication and application domain.
-    
-    Returns:
-        JSON string with current global state
-    """
-    return json.dumps({
-        "auth_state": {
-            "authenticated": is_token_valid(),
-            "token_type": auth_state.get("token_type"),
-            "expires_at": auth_state["expires_at"].isoformat() if auth_state.get("expires_at") else None
-        },
-        "app_state": {
-            "application_domain": app_state["application_domain"],
-            "tenant_id": app_state["tenant_id"],
-            "project_name": app_state["project_name"]
-        }
-    }, indent=2)
-
-
-@mcp.tool()
-async def save_captcha_config(
-    provider: str,
-    site_key: str,
-    secret_key: str,
-    project_key: str = "",
-    is_enable: bool = False
-) -> str:
-    """
-    Save CAPTCHA configuration for Google reCAPTCHA or hCaptcha.
-    
-    Args:
-        provider: CAPTCHA provider - "recaptcha" for Google reCAPTCHA or "hcaptcha" for hCaptcha
-        site_key: Public site key from CAPTCHA provider console
-        secret_key: Private secret key from CAPTCHA provider console
-        project_key: Project key (tenant ID). Uses global tenant_id if not provided
-        is_enable: Whether to enable the configuration immediately (default: False)
-    
-    Returns:
-        JSON string with CAPTCHA configuration save result
-    """
-    try:
-        # Check if authenticated
-        if not is_token_valid():
-            return json.dumps({
-                "status": "error",
-                "message": "Authentication required. Please login first using the login tool."
-            }, indent=2)
-        
-        # Use global tenant_id if project_key is not provided
-        if not project_key:
-            if not app_state["tenant_id"]:
-                return json.dumps({
-                    "status": "error",
-                    "message": "No project key provided and no tenant ID in global state. Please run get_projects or provide project_key."
-                }, indent=2)
-            project_key = app_state["tenant_id"]
-        
-        # Validate provider
-        if provider not in ["recaptcha", "hcaptcha"]:
-            return json.dumps({
-                "status": "error",
-                "message": "Invalid provider. Must be 'recaptcha' for Google reCAPTCHA or 'hcaptcha' for hCaptcha."
-            }, indent=2)
-        
-        headers = get_auth_headers()
-        
-        payload = {
-            "projectKey": project_key,
-            "isEnable": is_enable,
-            "provider": provider,
-            "captchaKey": site_key,
-            "captchaSecret": secret_key,
-            "captchaGenerator": ""
-        }
-        
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                API_CONFIG["CAPTCHA_SAVE_URL"],
-                headers=headers,
-                json=payload,
-                timeout=30.0
-            )
-            response.raise_for_status()
-            save_data = response.json()
-        
-        if save_data.get("isSuccess"):
-            # Get updated configurations to show the result
-            try:
-                list_result = await list_captcha_configs(project_key)
-                list_data = json.loads(list_result)
-                updated_configs = list_data.get("configurations", []) if list_data.get("status") == "success" else []
-            except Exception:
-                updated_configs = []
-            
-            result = {
-                "status": "success",
-                "message": f"{provider.capitalize()} CAPTCHA configuration saved successfully",
-                "config_details": {
-                    "provider": provider,
-                    "project_key": project_key,
-                    "is_enabled": is_enable,
-                    "site_key": site_key[:20] + "..." if len(site_key) > 20 else site_key
-                },
-                "response": save_data,
-                "updated_configurations": updated_configs
-            }
-        else:
-            result = {
-                "status": "error", 
-                "message": "Failed to save CAPTCHA configuration",
-                "errors": save_data.get("errors"),
-                "response": save_data
-            }
-        
-        return json.dumps(result, indent=2)
-        
-    except httpx.HTTPStatusError as e:
-        return json.dumps({
-            "status": "error",
-            "message": f"HTTP error saving CAPTCHA config: {e.response.status_code}",
-            "details": e.response.text
-        }, indent=2)
-    
-    except Exception as e:
-        return json.dumps({
-            "status": "error",
-            "message": f"Error saving CAPTCHA config: {str(e)}"
-        }, indent=2)
-
-
-@mcp.tool()
-async def list_captcha_configs(project_key: str = "") -> str:
-    """
-    List all CAPTCHA configurations for a project.
-    
-    Args:
-        project_key: Project key (tenant ID). Uses global tenant_id if not provided
-    
-    Returns:
-        JSON string with list of CAPTCHA configurations
-    """
-    try:
-        # Check if authenticated
-        if not is_token_valid():
-            return json.dumps({
-                "status": "error",
-                "message": "Authentication required. Please login first using the login tool."
-            }, indent=2)
-        
-        # Use global tenant_id if project_key is not provided
-        if not project_key:
-            if not app_state["tenant_id"]:
-                return json.dumps({
-                    "status": "error",
-                    "message": "No project key provided and no tenant ID in global state. Please run get_projects or provide project_key."
-                }, indent=2)
-            project_key = app_state["tenant_id"]
-        
-        headers = get_auth_headers()
-        params = {"ProjectKey": project_key}
-        
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                API_CONFIG["CAPTCHA_LIST_URL"],
-                headers=headers,
-                params=params,
-                timeout=30.0
-            )
-            response.raise_for_status()
-            configs_data = response.json()
-        
-        configurations = configs_data.get("configurations", [])
-        
-        result = {
-            "status": "success",
-            "message": f"Found {len(configurations)} CAPTCHA configuration(s)",
-            "project_key": project_key,
-            "configurations": configurations,
-            "summary": []
-        }
-        
-        # Add summary for easier reading
-        for config in configurations:
-            status = "Enabled" if config.get("isEnable") else "Disabled"
-            result["summary"].append({
-                "provider": config.get("provider"),
-                "status": status,
-                "item_id": config.get("itemId"),
-                "created_date": config.get("createdDate")
-            })
-        
-        return json.dumps(result, indent=2)
-        
-    except httpx.HTTPStatusError as e:
-        return json.dumps({
-            "status": "error",
-            "message": f"HTTP error listing CAPTCHA configs: {e.response.status_code}",
-            "details": e.response.text
-        }, indent=2)
-    
-    except Exception as e:
-        return json.dumps({
-            "status": "error",
-            "message": f"Error listing CAPTCHA configs: {str(e)}"
-        }, indent=2)
-
-
-@mcp.tool()
-async def update_captcha_status(item_id: str, is_enable: bool, project_key: str = "") -> str:
-    """
-    Enable or disable a CAPTCHA configuration.
-    
-    Args:
-        item_id: The ID of the CAPTCHA configuration to update
-        is_enable: True to enable, False to disable the configuration
-        project_key: Project key (tenant ID). Uses global tenant_id if not provided
-    
-    Returns:
-        JSON string with status update result
-    """
-    try:
-        # Check if authenticated
-        if not is_token_valid():
-            return json.dumps({
-                "status": "error",
-                "message": "Authentication required. Please login first using the login tool."
-            }, indent=2)
-        
-        # Use global tenant_id if project_key is not provided
-        if not project_key:
-            if not app_state["tenant_id"]:
-                return json.dumps({
-                    "status": "error",
-                    "message": "No project key provided and no tenant ID in global state. Please run get_projects or provide project_key."
-                }, indent=2)
-            project_key = app_state["tenant_id"]
-        
-        headers = get_auth_headers()
-        
-        payload = {
-            "projectKey": project_key,
-            "isEnable": is_enable,
-            "itemId": item_id
-        }
-        
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                API_CONFIG["CAPTCHA_UPDATE_STATUS_URL"],
-                headers=headers,
-                json=payload,
-                timeout=30.0
-            )
-            response.raise_for_status()
-            update_data = response.json()
-        
-        if update_data.get("isSuccess"):
-            status_text = "enabled" if is_enable else "disabled"
-            
-            # Get updated configurations to confirm the change
-            try:
-                list_result = await list_captcha_configs(project_key)
-                list_data = json.loads(list_result)
-                updated_configs = list_data.get("configurations", []) if list_data.get("status") == "success" else []
-            except Exception:
-                updated_configs = []
-            
-            result = {
-                "status": "success",
-                "message": f"CAPTCHA configuration {status_text} successfully",
-                "config_details": {
-                    "item_id": item_id,
-                    "project_key": project_key,
-                    "is_enabled": is_enable
-                },
-                "response": update_data,
-                "updated_configurations": updated_configs
-            }
-        else:
-            result = {
-                "status": "error",
-                "message": "Failed to update CAPTCHA configuration status",
-                "errors": update_data.get("errors"),
-                "response": update_data
-            }
-        
-        return json.dumps(result, indent=2)
-        
-    except httpx.HTTPStatusError as e:
-        return json.dumps({
-            "status": "error",
-            "message": f"HTTP error updating CAPTCHA status: {e.response.status_code}",
-            "details": e.response.text
-        }, indent=2)
-    
-    except Exception as e:
-        return json.dumps({
-            "status": "error",
-            "message": f"Error updating CAPTCHA status: {str(e)}"
-        }, indent=2)
-
-
-@mcp.tool()
-async def list_roles(
-    project_key: str = "",
-    page: int = 0,
-    page_size: int = 10,
-    search: str = "",
-    sort_by: str = "Name",
-    sort_descending: bool = False
-) -> str:
-    """
-    List all roles for a project.
-    
-    Args:
-        project_key: Project key (tenant ID). Uses global tenant_id if not provided
-        page: Page number (default: 0)
-        page_size: Number of items per page (default: 10)
-        search: Search filter (default: "")
-        sort_by: Field to sort by (default: "Name")
-        sort_descending: Sort order (default: false)
-    
-    Returns:
-        JSON string with role list result
-    """
-    try:
-        # Check if authenticated
-        if not is_token_valid():
-            return json.dumps({
-                "status": "error",
-                "message": "Authentication required. Please login first using the login tool."
-            }, indent=2)
-        
-        # Use global tenant_id if project_key is not provided
-        if not project_key:
-            if not app_state["tenant_id"]:
-                return json.dumps({
-                    "status": "error",
-                    "message": "No project key provided and no tenant ID in global state. Please run get_projects or provide project_key."
-                }, indent=2)
-            project_key = app_state["tenant_id"]
-        
-        headers = get_auth_headers()
-        
-        payload = {
-            "projectKey": project_key,
-            "page": page,
-            "pageSize": page_size,
-            "filter": {
-                "search": search
-            },
-            "sort": {
-                "property": sort_by,
-                "isDescending": sort_descending
-            }
-        }
-        
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                API_CONFIG["IAM_GET_ROLES_URL"],
-                headers=headers,
-                json=payload,
-                timeout=30.0
-            )
-            response.raise_for_status()
-            roles_data = response.json()
-        
-        roles = roles_data.get("data", [])
-        total_count = roles_data.get("totalCount", 0)
-        
-        result = {
-            "status": "success",
-            "message": f"Found {len(roles)} role(s) (total: {total_count})",
-            "project_key": project_key,
-            "total_count": total_count,
-            "roles": roles,
-            "summary": []
-        }
-        
-        # Add summary for easier reading
-        for role in roles:
-            result["summary"].append({
-                "name": role.get("name"),
-                "slug": role.get("slug"),
-                "description": role.get("description"),
-                "permissions_count": role.get("count", 0),
-                "item_id": role.get("itemId"),
-                "created_date": role.get("createdDate")
-            })
-        
-        return json.dumps(result, indent=2)
-        
-    except httpx.HTTPStatusError as e:
-        return json.dumps({
-            "status": "error",
-            "message": f"HTTP error listing roles: {e.response.status_code}",
-            "details": e.response.text
-        }, indent=2)
-    
-    except Exception as e:
-        return json.dumps({
-            "status": "error",
-            "message": f"Error listing roles: {str(e)}"
-        }, indent=2)
-
-
-@mcp.tool()
-async def create_role(
-    name: str,
-    description: str,
-    slug: str,
-    project_key: str = ""
-) -> str:
-    """
-    Create a new role.
-    
-    Args:
-        name: Role name
-        description: Role description
-        slug: Role slug (URL-friendly identifier)
-        project_key: Project key (tenant ID). Uses global tenant_id if not provided
-    
-    Returns:
-        JSON string with role creation result
-    """
-    try:
-        # Check if authenticated
-        if not is_token_valid():
-            return json.dumps({
-                "status": "error",
-                "message": "Authentication required. Please login first using the login tool."
-            }, indent=2)
-        
-        # Use global tenant_id if project_key is not provided
-        if not project_key:
-            if not app_state["tenant_id"]:
-                return json.dumps({
-                    "status": "error",
-                    "message": "No project key provided and no tenant ID in global state. Please run get_projects or provide project_key."
-                }, indent=2)
-            project_key = app_state["tenant_id"]
-        
-        headers = get_auth_headers()
-        
-        payload = {
-            "name": name,
-            "description": description,
-            "slug": slug,
-            "projectKey": project_key
-        }
-        
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                API_CONFIG["IAM_CREATE_ROLE_URL"],
-                headers=headers,
-                json=payload,
-                timeout=30.0
-            )
-            response.raise_for_status()
-            create_data = response.json()
-        
-        if create_data.get("isSuccess"):
-            # Get updated role list to show the result
-            try:
-                list_result = await list_roles(project_key)
-                list_data = json.loads(list_result)
-                updated_roles = list_data.get("roles", []) if list_data.get("status") == "success" else []
-            except Exception:
-                updated_roles = []
-            
-            result = {
-                "status": "success",
-                "message": f"Role '{name}' created successfully",
-                "role_details": {
-                    "name": name,
-                    "description": description,
-                    "slug": slug,
-                    "project_key": project_key,
-                    "item_id": create_data.get("itemId")
-                },
-                "response": create_data,
-                "updated_roles": updated_roles
-            }
-        else:
-            result = {
-                "status": "error",
-                "message": "Failed to create role",
-                "errors": create_data.get("errors"),
-                "response": create_data
-            }
-        
-        return json.dumps(result, indent=2)
-        
-    except httpx.HTTPStatusError as e:
-        return json.dumps({
-            "status": "error",
-            "message": f"HTTP error creating role: {e.response.status_code}",
-            "details": e.response.text
-        }, indent=2)
-    
-    except Exception as e:
-        return json.dumps({
-            "status": "error",
-            "message": f"Error creating role: {str(e)}"
-        }, indent=2)
-
-
-@mcp.tool()
-async def list_permissions(
-    project_key: str = "",
-    page: int = 0,
-    page_size: int = 10,
-    search: str = "",
-    sort_by: str = "Name",
-    sort_descending: bool = False,
-    is_built_in: str = "",
-    resource_group: str = ""
-) -> str:
-    """
-    List all permissions for a project.
-    
-    Args:
-        project_key: Project key (tenant ID). Uses global tenant_id if not provided
-        page: Page number (default: 0)
-        page_size: Number of items per page (default: 10)
-        search: Search filter (default: "")
-        sort_by: Field to sort by (default: "Name")
-        sort_descending: Sort order (default: false)
-        is_built_in: Filter by built-in status (default: "")
-        resource_group: Filter by resource group (default: "")
-    
-    Returns:
-        JSON string with permission list result
-    """
-    try:
-        # Check if authenticated
-        if not is_token_valid():
-            return json.dumps({
-                "status": "error",
-                "message": "Authentication required. Please login first using the login tool."
-            }, indent=2)
-        
-        # Use global tenant_id if project_key is not provided
-        if not project_key:
-            if not app_state["tenant_id"]:
-                return json.dumps({
-                    "status": "error",
-                    "message": "No project key provided and no tenant ID in global state. Please run get_projects or provide project_key."
-                }, indent=2)
-            project_key = app_state["tenant_id"]
-        
-        headers = get_auth_headers()
-        
-        payload = {
-            "page": page,
-            "pageSize": page_size,
-            "projectKey": project_key,
-            "roles": [],
-            "sort": {
-                "property": sort_by,
-                "isDescending": sort_descending
-            },
-            "filter": {
-                "search": search,
-                "isBuiltIn": is_built_in,
-                "resourceGroup": resource_group
-            }
-        }
-        
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                API_CONFIG["IAM_GET_PERMISSIONS_URL"],
-                headers=headers,
-                json=payload,
-                timeout=30.0
-            )
-            response.raise_for_status()
-            permissions_data = response.json()
-        
-        permissions = permissions_data.get("data", [])
-        total_count = permissions_data.get("totalCount", 0)
-        
-        result = {
-            "status": "success",
-            "message": f"Found {len(permissions)} permission(s) (total: {total_count})",
-            "project_key": project_key,
-            "total_count": total_count,
-            "permissions": permissions,
-            "summary": []
-        }
-        
-        # Add summary for easier reading
-        for perm in permissions:
-            result["summary"].append({
-                "name": perm.get("name"),
-                "resource": perm.get("resource"),
-                "resource_group": perm.get("resourceGroup"),
-                "type": perm.get("type"),
-                "tags": perm.get("tags", []),
-                "is_built_in": perm.get("isBuiltIn"),
-                "item_id": perm.get("itemId"),
-                "created_date": perm.get("createdDate")
-            })
-        
-        return json.dumps(result, indent=2)
-        
-    except httpx.HTTPStatusError as e:
-        return json.dumps({
-            "status": "error",
-            "message": f"HTTP error listing permissions: {e.response.status_code}",
-            "details": e.response.text
-        }, indent=2)
-    
-    except Exception as e:
-        return json.dumps({
-            "status": "error",
-            "message": f"Error listing permissions: {str(e)}"
-        }, indent=2)
-
-
-@mcp.tool()
-async def create_permission(
-    name: str,
-    description: str,
-    resource: str,
-    resource_group: str,
-    tags: list,
-    project_key: str = "",
-    type: int = 3,
-    dependent_permissions: list = None,
-    is_built_in: bool = False
-) -> str:
-    """
-    Create a new permission.
-    
-    Args:
-        name: Permission name
-        description: Permission description
-        resource: Resource name (arbitrary string)
-        resource_group: Resource group name (arbitrary string)
-        tags: List of action tags (e.g., ["create", "read", "update", "delete"])
-        project_key: Project key (tenant ID). Uses global tenant_id if not provided
-        type: Permission type (default: 3 for "Data protection")
-        dependent_permissions: List of dependent permission IDs (default: [])
-        is_built_in: Whether it's a built-in permission (default: false)
-    
-    Returns:
-        JSON string with permission creation result
-    """
-    try:
-        # Check if authenticated
-        if not is_token_valid():
-            return json.dumps({
-                "status": "error",
-                "message": "Authentication required. Please login first using the login tool."
-            }, indent=2)
-        
-        # Use global tenant_id if project_key is not provided
-        if not project_key:
-            if not app_state["tenant_id"]:
-                return json.dumps({
-                    "status": "error",
-                    "message": "No project key provided and no tenant ID in global state. Please run get_projects or provide project_key."
-                }, indent=2)
-            project_key = app_state["tenant_id"]
-        
-        if dependent_permissions is None:
-            dependent_permissions = []
-        
-        headers = get_auth_headers()
-        
-        payload = {
-            "name": name,
-            "type": type,
-            "resource": resource,
-            "resourceGroup": resource_group,
-            "tags": tags,
-            "description": description,
-            "dependentPermissions": dependent_permissions,
-            "projectKey": project_key,
-            "isBuiltIn": is_built_in
-        }
-        
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                API_CONFIG["IAM_CREATE_PERMISSION_URL"],
-                headers=headers,
-                json=payload,
-                timeout=30.0
-            )
-            response.raise_for_status()
-            create_data = response.json()
-        
-        if create_data.get("isSuccess"):
-            # Get updated permission list to show the result
-            try:
-                list_result = await list_permissions(project_key)
-                list_data = json.loads(list_result)
-                updated_permissions = list_data.get("permissions", []) if list_data.get("status") == "success" else []
-            except Exception:
-                updated_permissions = []
-            
-            result = {
-                "status": "success",
-                "message": f"Permission '{name}' created successfully",
-                "permission_details": {
-                    "name": name,
-                    "description": description,
-                    "resource": resource,
-                    "resource_group": resource_group,
-                    "tags": tags,
-                    "type": type,
-                    "project_key": project_key,
-                    "item_id": create_data.get("itemId")
-                },
-                "response": create_data,
-                "updated_permissions": updated_permissions
-            }
-        else:
-            result = {
-                "status": "error",
-                "message": "Failed to create permission",
-                "errors": create_data.get("errors"),
-                "response": create_data
-            }
-        
-        return json.dumps(result, indent=2)
-        
-    except httpx.HTTPStatusError as e:
-        return json.dumps({
-            "status": "error",
-            "message": f"HTTP error creating permission: {e.response.status_code}",
-            "details": e.response.text
-        }, indent=2)
-    
-    except Exception as e:
-        return json.dumps({
-            "status": "error",
-            "message": f"Error creating permission: {str(e)}"
-        }, indent=2)
-
-
-@mcp.tool()
-async def update_permission(
-    item_id: str,
-    name: str,
-    description: str,
-    resource: str,
-    resource_group: str,
-    tags: list,
-    project_key: str = "",
-    type: int = 3,
-    dependent_permissions: list = None,
-    is_built_in: bool = False
-) -> str:
-    """
-    Update an existing permission.
-    
-    Args:
-        item_id: The ID of the permission to update
-        name: Permission name
-        description: Permission description
-        resource: Resource name (arbitrary string)
-        resource_group: Resource group name (arbitrary string)
-        tags: List of action tags (e.g., ["create", "read", "update", "delete"])
-        project_key: Project key (tenant ID). Uses global tenant_id if not provided
-        type: Permission type (default: 3 for "Data protection")
-        dependent_permissions: List of dependent permission IDs (default: [])
-        is_built_in: Whether it's a built-in permission (default: false)
-    
-    Returns:
-        JSON string with permission update result
-    """
-    try:
-        # Check if authenticated
-        if not is_token_valid():
-            return json.dumps({
-                "status": "error",
-                "message": "Authentication required. Please login first using the login tool."
-            }, indent=2)
-        
-        # Use global tenant_id if project_key is not provided
-        if not project_key:
-            if not app_state["tenant_id"]:
-                return json.dumps({
-                    "status": "error",
-                    "message": "No project key provided and no tenant ID in global state. Please run get_projects or provide project_key."
-                }, indent=2)
-            project_key = app_state["tenant_id"]
-        
-        if dependent_permissions is None:
-            dependent_permissions = []
-        
-        headers = get_auth_headers()
-        
-        payload = {
-            "name": name,
-            "type": type,
-            "resource": resource,
-            "resourceGroup": resource_group,
-            "tags": tags,
-            "description": description,
-            "dependentPermissions": dependent_permissions,
-            "projectKey": project_key,
-            "isBuiltIn": is_built_in,
-            "itemId": item_id
-        }
-        
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                API_CONFIG["IAM_UPDATE_PERMISSION_URL"],
-                headers=headers,
-                json=payload,
-                timeout=30.0
-            )
-            response.raise_for_status()
-            update_data = response.json()
-        
-        if update_data.get("isSuccess"):
-            # Get updated permission list to confirm the change
-            try:
-                list_result = await list_permissions(project_key)
-                list_data = json.loads(list_result)
-                updated_permissions = list_data.get("permissions", []) if list_data.get("status") == "success" else []
-            except Exception:
-                updated_permissions = []
-            
-            result = {
-                "status": "success",
-                "message": f"Permission '{name}' updated successfully",
-                "permission_details": {
-                    "item_id": item_id,
-                    "name": name,
-                    "description": description,
-                    "resource": resource,
-                    "resource_group": resource_group,
-                    "tags": tags,
-                    "type": type,
-                    "project_key": project_key
-                },
-                "response": update_data,
-                "updated_permissions": updated_permissions
-            }
-        else:
-            result = {
-                "status": "error",
-                "message": "Failed to update permission",
-                "errors": update_data.get("errors"),
-                "response": update_data
-            }
-        
-        return json.dumps(result, indent=2)
-        
-    except httpx.HTTPStatusError as e:
-        return json.dumps({
-            "status": "error",
-            "message": f"HTTP error updating permission: {e.response.status_code}",
-            "details": e.response.text
-        }, indent=2)
-    
-    except Exception as e:
-        return json.dumps({
-            "status": "error",
-            "message": f"Error updating permission: {str(e)}"
-        }, indent=2)
-
-
-@mcp.tool()
-async def get_resource_groups(project_key: str = "") -> str:
-    """
-    Get available resource groups for a project.
-    
-    Args:
-        project_key: Project key (tenant ID). Uses global tenant_id if not provided
-    
-    Returns:
-        JSON string with resource groups result
-    """
-    try:
-        # Check if authenticated
-        if not is_token_valid():
-            return json.dumps({
-                "status": "error",
-                "message": "Authentication required. Please login first using the login tool."
-            }, indent=2)
-        
-        # Use global tenant_id if project_key is not provided
-        if not project_key:
-            if not app_state["tenant_id"]:
-                return json.dumps({
-                    "status": "error",
-                    "message": "No project key provided and no tenant ID in global state. Please run get_projects or provide project_key."
-                }, indent=2)
-            project_key = app_state["tenant_id"]
-        
-        headers = get_auth_headers()
-        
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f"{API_CONFIG['IAM_GET_RESOURCE_GROUPS_URL']}?ProjectKey={project_key}",
-                headers=headers,
-                timeout=30.0
-            )
-            response.raise_for_status()
-            groups_data = response.json()
-        
-        result = {
-            "status": "success",
-            "message": f"Found {len(groups_data)} resource group(s)",
-            "project_key": project_key,
-            "resource_groups": groups_data,
-            "summary": []
-        }
-        
-        # Add summary for easier reading
-        for group in groups_data:
-            result["summary"].append({
-                "resource_group": group.get("resourceGroup"),
-                "count": group.get("count", 0)
-            })
-        
-        return json.dumps(result, indent=2)
-        
-    except httpx.HTTPStatusError as e:
-        return json.dumps({
-            "status": "error",
-            "message": f"HTTP error getting resource groups: {e.response.status_code}",
-            "details": e.response.text
-        }, indent=2)
-    
-    except Exception as e:
-        return json.dumps({
-            "status": "error",
-            "message": f"Error getting resource groups: {str(e)}"
-        }, indent=2)
-
-
-@mcp.tool()
-async def set_role_permissions(
-    role_slug: str,
-    add_permissions: list = None,
-    remove_permissions: list = None,
-    project_key: str = ""
-) -> str:
-    """
-    Assign or remove permissions from a role.
-    
-    Args:
-        role_slug: Role slug identifier
-        add_permissions: List of permission IDs to add to the role (default: [])
-        remove_permissions: List of permission IDs to remove from the role (default: [])
-        project_key: Project key (tenant ID). Uses global tenant_id if not provided
-    
-    Returns:
-        JSON string with role permission assignment result
-    """
-    try:
-        # Check if authenticated
-        if not is_token_valid():
-            return json.dumps({
-                "status": "error",
-                "message": "Authentication required. Please login first using the login tool."
-            }, indent=2)
-        
-        # Use global tenant_id if project_key is not provided
-        if not project_key:
-            if not app_state["tenant_id"]:
-                return json.dumps({
-                    "status": "error",
-                    "message": "No project key provided and no tenant ID in global state. Please run get_projects or provide project_key."
-                }, indent=2)
-            project_key = app_state["tenant_id"]
-        
-        if add_permissions is None:
-            add_permissions = []
-        if remove_permissions is None:
-            remove_permissions = []
-        
-        headers = get_auth_headers()
-        
-        payload = {
-            "addPermissions": add_permissions,
-            "removePermissions": remove_permissions,
-            "projectKey": project_key,
-            "slug": role_slug
-        }
-        
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                API_CONFIG["IAM_SET_ROLES_URL"],
-                headers=headers,
-                json=payload,
-                timeout=30.0
-            )
-            response.raise_for_status()
-            set_data = response.json()
-        
-        if set_data.get("success"):
-            # Get updated permissions to show the result
-            try:
-                updated_result = await get_role_permissions([role_slug], project_key)
-                updated_data = json.loads(updated_result)
-                updated_permissions = updated_data.get("permissions", []) if updated_data.get("status") == "success" else []
-            except Exception:
-                updated_permissions = []
-            
-            result = {
-                "status": "success",
-                "message": f"Role permissions updated successfully for '{role_slug}'",
-                "role_details": {
-                    "role_slug": role_slug,
-                    "added_permissions": add_permissions,
-                    "removed_permissions": remove_permissions,
-                    "project_key": project_key
-                },
-                "response": set_data,
-                "updated_permissions": updated_permissions
-            }
-        else:
-            result = {
-                "status": "error",
-                "message": "Failed to update role permissions",
-                "response": set_data
-            }
-        
-        return json.dumps(result, indent=2)
-        
-    except httpx.HTTPStatusError as e:
-        return json.dumps({
-            "status": "error",
-            "message": f"HTTP error setting role permissions: {e.response.status_code}",
-            "details": e.response.text
-        }, indent=2)
-    
-    except Exception as e:
-        return json.dumps({
-            "status": "error",
-            "message": f"Error setting role permissions: {str(e)}"
-        }, indent=2)
-
-
-@mcp.tool()
-async def get_role_permissions(
-    role_slugs: list,
-    project_key: str = "",
-    page: int = 0,
-    page_size: int = 10,
-    search: str = "",
-    is_built_in: str = "",
-    resource_group: str = ""
-) -> str:
-    """
-    Get permissions assigned to specific role(s).
-    
-    Args:
-        role_slugs: List of role slugs to filter by
-        project_key: Project key (tenant ID). Uses global tenant_id if not provided
-        page: Page number (default: 0)
-        page_size: Number of items per page (default: 10)
-        search: Search filter (default: "")
-        is_built_in: Filter by built-in status (default: "")
-        resource_group: Filter by resource group (default: "")
-    
-    Returns:
-        JSON string with role permissions result
-    """
-    try:
-        # Check if authenticated
-        if not is_token_valid():
-            return json.dumps({
-                "status": "error",
-                "message": "Authentication required. Please login first using the login tool."
-            }, indent=2)
-        
-        # Use global tenant_id if project_key is not provided
-        if not project_key:
-            if not app_state["tenant_id"]:
-                return json.dumps({
-                    "status": "error",
-                    "message": "No project key provided and no tenant ID in global state. Please run get_projects or provide project_key."
-                }, indent=2)
-            project_key = app_state["tenant_id"]
-        
-        headers = get_auth_headers()
-        
-        payload = {
-            "page": page,
-            "pageSize": page_size,
-            "roles": role_slugs,
-            "projectKey": project_key,
-            "sort": {
-                "property": "Name",
-                "isDescending": False
-            },
-            "filter": {
-                "search": search,
-                "isBuiltIn": is_built_in,
-                "resourceGroup": resource_group
-            }
-        }
-        
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                API_CONFIG["IAM_GET_PERMISSIONS_URL"],
-                headers=headers,
-                json=payload,
-                timeout=30.0
-            )
-            response.raise_for_status()
-            permissions_data = response.json()
-        
-        permissions = permissions_data.get("data", [])
-        total_count = permissions_data.get("totalCount", 0)
-        
-        result = {
-            "status": "success",
-            "message": f"Found {len(permissions)} permission(s) for role(s): {', '.join(role_slugs)} (total: {total_count})",
-            "role_slugs": role_slugs,
-            "project_key": project_key,
-            "total_count": total_count,
-            "permissions": permissions,
-            "summary": []
-        }
-        
-        # Add summary for easier reading
-        for perm in permissions:
-            result["summary"].append({
-                "name": perm.get("name"),
-                "roles": perm.get("roles", []),
-                "resource": perm.get("resource"),
-                "resource_group": perm.get("resourceGroup"),
-                "tags": perm.get("tags", []),
-                "item_id": perm.get("itemId"),
-                "created_date": perm.get("createdDate")
-            })
-        
-        return json.dumps(result, indent=2)
-        
-    except httpx.HTTPStatusError as e:
-        return json.dumps({
-            "status": "error",
-            "message": f"HTTP error getting role permissions: {e.response.status_code}",
-            "details": e.response.text
-        }, indent=2)
-    
-    except Exception as e:
-        return json.dumps({
-            "status": "error",
-            "message": f"Error getting role permissions: {str(e)}"
-        }, indent=2)
-
-
-@mcp.tool()
 async def enable_mfa(
     project_key: str = "",
-    mfa_types: list = None
+    mfa_types: list = None,
+    enable_mfa: bool = True
 ) -> str:
     """
-    Enable Multi-Factor Authentication (MFA) for a project with custom types.
+    Enable Multi-Factor Authentication (MFA) for a project.
     
     Args:
         project_key: Project key (tenant ID). Uses global tenant_id if not provided
-        mfa_types: List of MFA types to enable (e.g., ["email", "authenticator"])
+        mfa_types: List of MFA types to enable. Options:
+                  - [2] for email only
+                  - [1] for authenticator app only  
+                  - [2, 1] for both email and authenticator app
+                  Default: [2] (email only)
+        enable_mfa: Whether to enable MFA (default: True)
     
     Returns:
         JSON string with MFA configuration result
@@ -2555,116 +1397,156 @@ async def enable_mfa(
                 }, indent=2)
             project_key = app_state["tenant_id"]
         
-        # Set default MFA types if not provided
+        # Set default MFA types if not provided (email only)
         if mfa_types is None:
-            mfa_types = ["email", "authenticator"]
+            mfa_types = [2]
         
-        headers = get_auth_headers()
+        # Validate MFA types
+        valid_types = [1, 2]  # 1 = authenticator app, 2 = email
+        for mfa_type in mfa_types:
+            if mfa_type not in valid_types:
+                return json.dumps({
+                    "status": "error",
+                    "message": f"Invalid MFA type: {mfa_type}. Valid types are: 1 (authenticator app), 2 (email)"
+                }, indent=2)
         
-        payload = {
+        # Prepare headers matching the curl example
+        headers = {
+            "accept": "application/json",
+            "accept-language": "en-US,en;q=0.9",
+            "authorization": f"Bearer {auth_state['access_token']}",
+            "content-type": "application/json",
+            "dnt": "1",
+            "origin": "https://cloud.seliseblocks.com",
+            "priority": "u=1, i",
+            "referer": "https://cloud.seliseblocks.com/",
+            "sec-ch-ua": '"Chromium";v="139", "Not;A=Brand";v="99"',
+            "sec-ch-ua-mobile": "?1",
+            "sec-ch-ua-platform": '"Android"',
+            "sec-fetch-dest": "empty",
+            "sec-fetch-mode": "cors",
+            "sec-fetch-site": "same-site",
+            "user-agent": "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Mobile Safari/537.36",
+            "x-blocks-key": "d7e5554c758541db8a18694b64ef423d"
+        }
+        
+        # Prepare payload for MFA configuration
+        mfa_payload = {
             "projectKey": project_key,
-            "mfaTypes": mfa_types,
-            "isEnabled": True
+            "enableMfa": enable_mfa,
+            "userMfaType": mfa_types
         }
         
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 API_CONFIG["MFA_CONFIG_URL"],
                 headers=headers,
-                json=payload,
+                json=mfa_payload,
                 timeout=30.0
             )
             response.raise_for_status()
-            mfa_data = response.json()
+            response_data = response.json()
         
-        if mfa_data.get("success", True):
-            result = {
-                "status": "success",
-                "message": f"MFA enabled successfully with types: {', '.join(mfa_types)}",
-                "config_details": {
-                    "project_key": project_key,
-                    "mfa_types": mfa_types,
-                    "enabled": True
-                },
-                "response": mfa_data
-            }
-        else:
-            result = {
-                "status": "error",
-                "message": "Failed to enable MFA",
-                "errors": mfa_data.get("errors"),
-                "response": mfa_data
-            }
+        # Determine MFA type description
+        mfa_type_descriptions = []
+        if 1 in mfa_types:
+            mfa_type_descriptions.append("Authenticator App")
+        if 2 in mfa_types:
+            mfa_type_descriptions.append("Email")
+        
+        mfa_description = " and ".join(mfa_type_descriptions)
+        
+        result = {
+            "status": "success",
+            "message": f"MFA {'enabled' if enable_mfa else 'disabled'} successfully for project {project_key}",
+            "mfa_config": {
+                "project_key": project_key,
+                "enable_mfa": enable_mfa,
+                "mfa_types": mfa_types,
+                "mfa_type_description": mfa_description
+            },
+            "response": response_data
+        }
         
         return json.dumps(result, indent=2)
         
     except httpx.HTTPStatusError as e:
         return json.dumps({
             "status": "error",
-            "message": f"HTTP error enabling MFA: {e.response.status_code}",
-            "details": e.response.text
+            "message": f"HTTP error during MFA configuration: {e.response.status_code}",
+            "details": e.response.text,
+            "mfa_payload": mfa_payload if 'mfa_payload' in locals() else None
         }, indent=2)
     
     except Exception as e:
         return json.dumps({
             "status": "error",
-            "message": f"Error enabling MFA: {str(e)}"
+            "message": f"Error configuring MFA: {str(e)}",
+            "mfa_payload": mfa_payload if 'mfa_payload' in locals() else None
         }, indent=2)
 
 
 @mcp.tool()
-async def enable_email_mfa(project_key: str = "") -> str:
-    """
-    Enable Email Multi-Factor Authentication for a project.
-    
-    Args:
-        project_key: Project key (tenant ID). Uses global tenant_id if not provided
-    
-    Returns:
-        JSON string with Email MFA configuration result
-    """
-    return await enable_mfa(project_key, ["email"])
-
-
-@mcp.tool()
-async def enable_authenticator_mfa(project_key: str = "") -> str:
-    """
-    Enable Authenticator App Multi-Factor Authentication for a project.
-    
-    Args:
-        project_key: Project key (tenant ID). Uses global tenant_id if not provided
-    
-    Returns:
-        JSON string with Authenticator MFA configuration result
-    """
-    return await enable_mfa(project_key, ["authenticator"])
-
-
-@mcp.tool()
-async def enable_both_mfa_types(project_key: str = "") -> str:
-    """
-    Enable both Email and Authenticator Multi-Factor Authentication for a project.
-    
-    Args:
-        project_key: Project key (tenant ID). Uses global tenant_id if not provided
-    
-    Returns:
-        JSON string with MFA configuration result for both types
-    """
-    return await enable_mfa(project_key, ["email", "authenticator"])
-
-
-@mcp.tool()
-async def configure_blocks_data_gateway(
+async def enable_email_mfa(
     project_key: str = "",
-    gateway_config: dict = None
+    enable_mfa: bool = True
 ) -> str:
     """
-    Configure Blocks Data Gateway for GraphQL operations.
+    Enable Email-only Multi-Factor Authentication (MFA) for a project.
     
     Args:
         project_key: Project key (tenant ID). Uses global tenant_id if not provided
-        gateway_config: Gateway configuration dictionary
+        enable_mfa: Whether to enable MFA (default: True)
+    
+    Returns:
+        JSON string with email MFA configuration result
+    """
+    return await enable_mfa(project_key, [2], enable_mfa)
+
+
+@mcp.tool()
+async def enable_authenticator_mfa(
+    project_key: str = "",
+    enable_mfa: bool = True
+) -> str:
+    """
+    Enable Authenticator App-only Multi-Factor Authentication (MFA) for a project.
+    
+    Args:
+        project_key: Project key (tenant ID). Uses global tenant_id if not provided
+        enable_mfa: Whether to enable MFA (default: True)
+    
+    Returns:
+        JSON string with authenticator app MFA configuration result
+    """
+    return await enable_mfa(project_key, [1], enable_mfa)
+
+
+@mcp.tool()
+async def enable_both_mfa_types(
+    project_key: str = "",
+    enable_mfa: bool = True
+) -> str:
+    """
+    Enable both Email and Authenticator App Multi-Factor Authentication (MFA) for a project.
+    
+    Args:
+        project_key: Project key (tenant ID). Uses global tenant_id if not provided
+        enable_mfa: Whether to enable MFA (default: True)
+    
+    Returns:
+        JSON string with both MFA types configuration result
+    """
+    return await enable_mfa(project_key, [2, 1], enable_mfa)
+
+
+@mcp.tool()
+async def configure_blocks_data_gateway(project_key: str = "") -> str:
+    """
+    Configure Blocks Data Gateway for a project by setting up datasource configuration.
+    
+    Args:
+        project_key: Project key (tenant ID). Uses global tenant_id if not provided
     
     Returns:
         JSON string with data gateway configuration result
@@ -2686,62 +1568,79 @@ async def configure_blocks_data_gateway(
                 }, indent=2)
             project_key = app_state["tenant_id"]
         
-        # Set default gateway config if not provided
-        if gateway_config is None:
-            gateway_config = {
-                "enableDataGateway": True,
-                "gatewayEndpoint": f"https://api.seliseblocks.com/graphql/v1/{project_key}",
-                "enableRealTimeSubscriptions": True
-            }
+        # Prepare headers matching the curl example
+        headers = {
+            "accept": "application/json",
+            "accept-language": "en-US,en;q=0.9",
+            "authorization": f"Bearer {auth_state['access_token']}",
+            "content-type": "application/json",
+            "dnt": "1",
+            "origin": "https://cloud.seliseblocks.com",
+            "priority": "u=1, i",
+            "referer": "https://cloud.seliseblocks.com/",
+            "sec-ch-ua": '"Chromium";v="139", "Not;A=Brand";v="99"',
+            "sec-ch-ua-mobile": "?1",
+            "sec-ch-ua-platform": '"Android"',
+            "sec-fetch-dest": "empty",
+            "sec-fetch-mode": "cors",
+            "sec-fetch-site": "same-site",
+            "user-agent": "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Mobile Safari/537.36",
+            "x-blocks-key": "d7e5554c758541db8a18694b64ef423d"
+        }
         
-        headers = get_auth_headers()
-        
-        payload = {
+        # Step 1: Configure datasource (POST request)
+        datasource_url = f"{API_CONFIG['DATA_GATEWAY_URL']}/datasource"
+        datasource_payload = {
+            "connectionString": "default",
+            "databaseName": "default",
             "projectKey": project_key,
-            **gateway_config
+            "itemId": ""
         }
         
         async with httpx.AsyncClient() as client:
-            response = await client.post(
-                API_CONFIG["DATA_GATEWAY_URL"],
+            # Configure datasource
+            config_response = await client.post(
+                datasource_url,
                 headers=headers,
-                json=payload,
+                json=datasource_payload,
                 timeout=30.0
             )
-            response.raise_for_status()
-            gateway_data = response.json()
+            config_response.raise_for_status()
+            config_data = config_response.json()
+            
+            # Step 2: Retrieve configuration to confirm (GET request)
+            get_url = f"{API_CONFIG['DATA_GATEWAY_URL']}/{project_key}/datasource"
+            get_response = await client.get(
+                get_url,
+                headers=headers,
+                timeout=30.0
+            )
+            get_response.raise_for_status()
+            gateway_data = get_response.json()
         
-        if gateway_data.get("success", True):
-            result = {
-                "status": "success",
-                "message": "Data Gateway configured successfully",
-                "config_details": {
-                    "project_key": project_key,
-                    "gateway_config": gateway_config
-                },
-                "response": gateway_data
-            }
-        else:
-            result = {
-                "status": "error",
-                "message": "Failed to configure Data Gateway",
-                "errors": gateway_data.get("errors"),
-                "response": gateway_data
-            }
+        result = {
+            "status": "success",
+            "message": f"Blocks Data Gateway configured successfully for project {project_key}",
+            "project_key": project_key,
+            "configuration_result": config_data,
+            "gateway_configuration": gateway_data
+        }
         
         return json.dumps(result, indent=2)
         
     except httpx.HTTPStatusError as e:
         return json.dumps({
             "status": "error",
-            "message": f"HTTP error configuring Data Gateway: {e.response.status_code}",
-            "details": e.response.text
+            "message": f"HTTP error during data gateway configuration: {e.response.status_code}",
+            "details": e.response.text,
+            "project_key": project_key
         }, indent=2)
     
     except Exception as e:
         return json.dumps({
             "status": "error",
-            "message": f"Error configuring Data Gateway: {str(e)}"
+            "message": f"Error configuring Blocks Data Gateway: {str(e)}",
+            "project_key": project_key if 'project_key' in locals() else None
         }, indent=2)
 
 
@@ -2750,23 +1649,29 @@ async def add_sso_credential(
     provider: str,
     client_id: str,
     client_secret: str,
+    audience: str,
+    redirect_url: str,
     project_key: str = "",
-    is_enable: bool = True,
-    redirect_uri: str = ""
+    item_id: str = "",
+    initial_permissions: list = None,
+    initial_roles: list = None
 ) -> str:
     """
-    Add social login credentials for OAuth providers (Google, Facebook, GitHub, etc.).
+    Add SSO credentials for social login configuration in Selise Cloud.
     
     Args:
-        provider: OAuth provider name (e.g., "google", "facebook", "github")
-        client_id: OAuth client ID from provider console
-        client_secret: OAuth client secret from provider console
+        provider: SSO provider name (e.g., "google", "facebook", "github")
+        client_id: Client ID from the SSO provider
+        client_secret: Client secret from the SSO provider
+        audience: Audience URL for the SSO configuration
+        redirect_url: Redirect URL after authentication
         project_key: Project key (tenant ID). Uses global tenant_id if not provided
-        is_enable: Whether to enable this SSO provider (default: True)
-        redirect_uri: OAuth redirect URI (optional)
+        item_id: Item ID for the SSO configuration (optional)
+        initial_permissions: List of initial permissions (optional)
+        initial_roles: List of initial roles (optional)
     
     Returns:
-        JSON string with SSO credential save result
+        JSON string with SSO credential configuration result
     """
     try:
         # Check if authenticated
@@ -2785,66 +1690,109 @@ async def add_sso_credential(
                 }, indent=2)
             project_key = app_state["tenant_id"]
         
-        # Set default redirect URI if not provided
-        if not redirect_uri and app_state.get("application_domain"):
-            redirect_uri = f"{app_state['application_domain']}/auth/{provider}/callback"
+        # Set default values if not provided
+        if initial_permissions is None:
+            initial_permissions = []
+        if initial_roles is None:
+            initial_roles = []
         
-        headers = get_auth_headers()
+        # Prepare headers matching the curl example
+        headers = {
+            "accept": "application/json",
+            "accept-language": "en-US,en;q=0.9",
+            "authorization": f"Bearer {auth_state['access_token']}",
+            "content-type": "application/json",
+            "dnt": "1",
+            "origin": "https://cloud.seliseblocks.com",
+            "priority": "u=1, i",
+            "referer": "https://cloud.seliseblocks.com/",
+            "sec-ch-ua": '"Chromium";v="139", "Not;A=Brand";v="99"',
+            "sec-ch-ua-mobile": "?1",
+            "sec-ch-ua-platform": '"Android"',
+            "sec-fetch-dest": "empty",
+            "sec-fetch-mode": "cors",
+            "sec-fetch-site": "same-site",
+            "user-agent": "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Mobile Safari/537.36",
+            "x-blocks-key": "d7e5554c758541db8a18694b64ef423d"
+        }
         
-        payload = {
-            "projectKey": project_key,
-            "provider": provider,
+        # Prepare payload for SSO credential configuration
+        sso_payload = {
+            "itemId": item_id,
+            "audience": audience,
             "clientId": client_id,
             "clientSecret": client_secret,
-            "isEnable": is_enable,
-            "redirectUri": redirect_uri
+            "initialPermissions": initial_permissions,
+            "initialRoles": initial_roles,
+            "provider": provider.lower(),
+            "redirectUrl": redirect_url,
+            "projectKey": project_key
         }
         
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 API_CONFIG["SAVE_SSO_URL"],
                 headers=headers,
-                json=payload,
+                json=sso_payload,
                 timeout=30.0
             )
             response.raise_for_status()
-            sso_data = response.json()
+            response_data = response.json()
         
-        if sso_data.get("isSuccess", True):
-            result = {
-                "status": "success",
-                "message": f"{provider.capitalize()} SSO credentials saved successfully",
-                "config_details": {
-                    "provider": provider,
-                    "project_key": project_key,
-                    "client_id": client_id[:20] + "..." if len(client_id) > 20 else client_id,
-                    "is_enabled": is_enable,
-                    "redirect_uri": redirect_uri
-                },
-                "response": sso_data
-            }
-        else:
-            result = {
-                "status": "error",
-                "message": f"Failed to save {provider} SSO credentials",
-                "errors": sso_data.get("errors"),
-                "response": sso_data
-            }
+        result = {
+            "status": "success",
+            "message": f"SSO credential for {provider} added successfully to project {project_key}",
+            "sso_config": {
+                "provider": provider.lower(),
+                "client_id": client_id,
+                "audience": audience,
+                "redirect_url": redirect_url,
+                "project_key": project_key,
+                "item_id": item_id,
+                "initial_permissions": initial_permissions,
+                "initial_roles": initial_roles
+            },
+            "response": response_data
+        }
         
         return json.dumps(result, indent=2)
         
     except httpx.HTTPStatusError as e:
         return json.dumps({
             "status": "error",
-            "message": f"HTTP error saving SSO credentials: {e.response.status_code}",
-            "details": e.response.text
+            "message": f"HTTP error during SSO credential configuration: {e.response.status_code}",
+            "details": e.response.text,
+            "sso_payload": sso_payload if 'sso_payload' in locals() else None
         }, indent=2)
     
     except Exception as e:
         return json.dumps({
             "status": "error",
-            "message": f"Error saving SSO credentials: {str(e)}"
+            "message": f"Error adding SSO credential: {str(e)}",
+            "sso_payload": sso_payload if 'sso_payload' in locals() else None
         }, indent=2)
+
+
+@mcp.tool()
+async def get_global_state() -> str:
+    """
+    Get the current global state including authentication and application domain.
+    
+    Returns:
+        JSON string with current global state
+    """
+    return json.dumps({
+        "auth_state": {
+            "authenticated": is_token_valid(),
+            "token_type": auth_state.get("token_type"),
+            "expires_at": auth_state["expires_at"].isoformat() if auth_state.get("expires_at") else None
+        },
+        "app_state": {
+            "application_domain": app_state["application_domain"],
+            "tenant_id": app_state["tenant_id"],
+            "project_name": app_state["project_name"]
+        }
+    }, indent=2)
 
 
 async def get_tenant_id(tenant_group_id: str, project_name: str) -> Optional[str]:
