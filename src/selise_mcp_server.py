@@ -45,6 +45,7 @@ API_CONFIG = {
     "IAM_CREATE_PERMISSION_URL": "https://api.seliseblocks.com/iam/v1/Resource/CreatePermission",
     "IAM_UPDATE_PERMISSION_URL": "https://api.seliseblocks.com/iam/v1/Resource/UpdatePermission",
     "IAM_GET_RESOURCE_GROUPS_URL": "https://api.seliseblocks.com/iam/v1/Resource/GetResourceGroups",
+    "IAM_SET_ROLES_URL": "https://api.seliseblocks.com/iam/v1/Resource/SetRoles",
     "HEADERS": {
         "x-blocks-key": "d7e5554c758541db8a18694b64ef423d",
         "Origin": "https://cloud.seliseblocks.com",
@@ -2301,6 +2302,221 @@ async def get_resource_groups(project_key: str = "") -> str:
         return json.dumps({
             "status": "error",
             "message": f"Error getting resource groups: {str(e)}"
+        }, indent=2)
+
+
+@mcp.tool()
+async def set_role_permissions(
+    role_slug: str,
+    add_permissions: list = None,
+    remove_permissions: list = None,
+    project_key: str = ""
+) -> str:
+    """
+    Assign or remove permissions from a role.
+    
+    Args:
+        role_slug: Role slug identifier
+        add_permissions: List of permission IDs to add to the role (default: [])
+        remove_permissions: List of permission IDs to remove from the role (default: [])
+        project_key: Project key (tenant ID). Uses global tenant_id if not provided
+    
+    Returns:
+        JSON string with role permission assignment result
+    """
+    try:
+        # Check if authenticated
+        if not is_token_valid():
+            return json.dumps({
+                "status": "error",
+                "message": "Authentication required. Please login first using the login tool."
+            }, indent=2)
+        
+        # Use global tenant_id if project_key is not provided
+        if not project_key:
+            if not app_state["tenant_id"]:
+                return json.dumps({
+                    "status": "error",
+                    "message": "No project key provided and no tenant ID in global state. Please run get_projects or provide project_key."
+                }, indent=2)
+            project_key = app_state["tenant_id"]
+        
+        if add_permissions is None:
+            add_permissions = []
+        if remove_permissions is None:
+            remove_permissions = []
+        
+        headers = get_auth_headers()
+        
+        payload = {
+            "addPermissions": add_permissions,
+            "removePermissions": remove_permissions,
+            "projectKey": project_key,
+            "slug": role_slug
+        }
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                API_CONFIG["IAM_SET_ROLES_URL"],
+                headers=headers,
+                json=payload,
+                timeout=30.0
+            )
+            response.raise_for_status()
+            set_data = response.json()
+        
+        if set_data.get("success"):
+            # Get updated permissions to show the result
+            try:
+                updated_result = await get_role_permissions([role_slug], project_key)
+                updated_data = json.loads(updated_result)
+                updated_permissions = updated_data.get("permissions", []) if updated_data.get("status") == "success" else []
+            except Exception:
+                updated_permissions = []
+            
+            result = {
+                "status": "success",
+                "message": f"Role permissions updated successfully for '{role_slug}'",
+                "role_details": {
+                    "role_slug": role_slug,
+                    "added_permissions": add_permissions,
+                    "removed_permissions": remove_permissions,
+                    "project_key": project_key
+                },
+                "response": set_data,
+                "updated_permissions": updated_permissions
+            }
+        else:
+            result = {
+                "status": "error",
+                "message": "Failed to update role permissions",
+                "response": set_data
+            }
+        
+        return json.dumps(result, indent=2)
+        
+    except httpx.HTTPStatusError as e:
+        return json.dumps({
+            "status": "error",
+            "message": f"HTTP error setting role permissions: {e.response.status_code}",
+            "details": e.response.text
+        }, indent=2)
+    
+    except Exception as e:
+        return json.dumps({
+            "status": "error",
+            "message": f"Error setting role permissions: {str(e)}"
+        }, indent=2)
+
+
+@mcp.tool()
+async def get_role_permissions(
+    role_slugs: list,
+    project_key: str = "",
+    page: int = 0,
+    page_size: int = 10,
+    search: str = "",
+    is_built_in: str = "",
+    resource_group: str = ""
+) -> str:
+    """
+    Get permissions assigned to specific role(s).
+    
+    Args:
+        role_slugs: List of role slugs to filter by
+        project_key: Project key (tenant ID). Uses global tenant_id if not provided
+        page: Page number (default: 0)
+        page_size: Number of items per page (default: 10)
+        search: Search filter (default: "")
+        is_built_in: Filter by built-in status (default: "")
+        resource_group: Filter by resource group (default: "")
+    
+    Returns:
+        JSON string with role permissions result
+    """
+    try:
+        # Check if authenticated
+        if not is_token_valid():
+            return json.dumps({
+                "status": "error",
+                "message": "Authentication required. Please login first using the login tool."
+            }, indent=2)
+        
+        # Use global tenant_id if project_key is not provided
+        if not project_key:
+            if not app_state["tenant_id"]:
+                return json.dumps({
+                    "status": "error",
+                    "message": "No project key provided and no tenant ID in global state. Please run get_projects or provide project_key."
+                }, indent=2)
+            project_key = app_state["tenant_id"]
+        
+        headers = get_auth_headers()
+        
+        payload = {
+            "page": page,
+            "pageSize": page_size,
+            "roles": role_slugs,
+            "projectKey": project_key,
+            "sort": {
+                "property": "Name",
+                "isDescending": False
+            },
+            "filter": {
+                "search": search,
+                "isBuiltIn": is_built_in,
+                "resourceGroup": resource_group
+            }
+        }
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                API_CONFIG["IAM_GET_PERMISSIONS_URL"],
+                headers=headers,
+                json=payload,
+                timeout=30.0
+            )
+            response.raise_for_status()
+            permissions_data = response.json()
+        
+        permissions = permissions_data.get("data", [])
+        total_count = permissions_data.get("totalCount", 0)
+        
+        result = {
+            "status": "success",
+            "message": f"Found {len(permissions)} permission(s) for role(s): {', '.join(role_slugs)} (total: {total_count})",
+            "role_slugs": role_slugs,
+            "project_key": project_key,
+            "total_count": total_count,
+            "permissions": permissions,
+            "summary": []
+        }
+        
+        # Add summary for easier reading
+        for perm in permissions:
+            result["summary"].append({
+                "name": perm.get("name"),
+                "roles": perm.get("roles", []),
+                "resource": perm.get("resource"),
+                "resource_group": perm.get("resourceGroup"),
+                "tags": perm.get("tags", []),
+                "item_id": perm.get("itemId"),
+                "created_date": perm.get("createdDate")
+            })
+        
+        return json.dumps(result, indent=2)
+        
+    except httpx.HTTPStatusError as e:
+        return json.dumps({
+            "status": "error",
+            "message": f"HTTP error getting role permissions: {e.response.status_code}",
+            "details": e.response.text
+        }, indent=2)
+    
+    except Exception as e:
+        return json.dumps({
+            "status": "error",
+            "message": f"Error getting role permissions: {str(e)}"
         }, indent=2)
 
 
