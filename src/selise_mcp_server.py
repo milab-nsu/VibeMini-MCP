@@ -41,6 +41,10 @@ API_CONFIG = {
     "CAPTCHA_UPDATE_STATUS_URL": "https://api.seliseblocks.com/captcha/v1/Configuration/UpdateStatus",
     "IAM_GET_ROLES_URL": "https://api.seliseblocks.com/iam/v1/Resource/GetRoles",
     "IAM_CREATE_ROLE_URL": "https://api.seliseblocks.com/iam/v1/Resource/CreateRole",
+    "IAM_GET_PERMISSIONS_URL": "https://api.seliseblocks.com/iam/v1/Resource/GetPermissions",
+    "IAM_CREATE_PERMISSION_URL": "https://api.seliseblocks.com/iam/v1/Resource/CreatePermission",
+    "IAM_UPDATE_PERMISSION_URL": "https://api.seliseblocks.com/iam/v1/Resource/UpdatePermission",
+    "IAM_GET_RESOURCE_GROUPS_URL": "https://api.seliseblocks.com/iam/v1/Resource/GetResourceGroups",
     "HEADERS": {
         "x-blocks-key": "d7e5554c758541db8a18694b64ef423d",
         "Origin": "https://cloud.seliseblocks.com",
@@ -1867,6 +1871,436 @@ async def create_role(
         return json.dumps({
             "status": "error",
             "message": f"Error creating role: {str(e)}"
+        }, indent=2)
+
+
+@mcp.tool()
+async def list_permissions(
+    project_key: str = "",
+    page: int = 0,
+    page_size: int = 10,
+    search: str = "",
+    sort_by: str = "Name",
+    sort_descending: bool = False,
+    is_built_in: str = "",
+    resource_group: str = ""
+) -> str:
+    """
+    List all permissions for a project.
+    
+    Args:
+        project_key: Project key (tenant ID). Uses global tenant_id if not provided
+        page: Page number (default: 0)
+        page_size: Number of items per page (default: 10)
+        search: Search filter (default: "")
+        sort_by: Field to sort by (default: "Name")
+        sort_descending: Sort order (default: false)
+        is_built_in: Filter by built-in status (default: "")
+        resource_group: Filter by resource group (default: "")
+    
+    Returns:
+        JSON string with permission list result
+    """
+    try:
+        # Check if authenticated
+        if not is_token_valid():
+            return json.dumps({
+                "status": "error",
+                "message": "Authentication required. Please login first using the login tool."
+            }, indent=2)
+        
+        # Use global tenant_id if project_key is not provided
+        if not project_key:
+            if not app_state["tenant_id"]:
+                return json.dumps({
+                    "status": "error",
+                    "message": "No project key provided and no tenant ID in global state. Please run get_projects or provide project_key."
+                }, indent=2)
+            project_key = app_state["tenant_id"]
+        
+        headers = get_auth_headers()
+        
+        payload = {
+            "page": page,
+            "pageSize": page_size,
+            "projectKey": project_key,
+            "roles": [],
+            "sort": {
+                "property": sort_by,
+                "isDescending": sort_descending
+            },
+            "filter": {
+                "search": search,
+                "isBuiltIn": is_built_in,
+                "resourceGroup": resource_group
+            }
+        }
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                API_CONFIG["IAM_GET_PERMISSIONS_URL"],
+                headers=headers,
+                json=payload,
+                timeout=30.0
+            )
+            response.raise_for_status()
+            permissions_data = response.json()
+        
+        permissions = permissions_data.get("data", [])
+        total_count = permissions_data.get("totalCount", 0)
+        
+        result = {
+            "status": "success",
+            "message": f"Found {len(permissions)} permission(s) (total: {total_count})",
+            "project_key": project_key,
+            "total_count": total_count,
+            "permissions": permissions,
+            "summary": []
+        }
+        
+        # Add summary for easier reading
+        for perm in permissions:
+            result["summary"].append({
+                "name": perm.get("name"),
+                "resource": perm.get("resource"),
+                "resource_group": perm.get("resourceGroup"),
+                "type": perm.get("type"),
+                "tags": perm.get("tags", []),
+                "is_built_in": perm.get("isBuiltIn"),
+                "item_id": perm.get("itemId"),
+                "created_date": perm.get("createdDate")
+            })
+        
+        return json.dumps(result, indent=2)
+        
+    except httpx.HTTPStatusError as e:
+        return json.dumps({
+            "status": "error",
+            "message": f"HTTP error listing permissions: {e.response.status_code}",
+            "details": e.response.text
+        }, indent=2)
+    
+    except Exception as e:
+        return json.dumps({
+            "status": "error",
+            "message": f"Error listing permissions: {str(e)}"
+        }, indent=2)
+
+
+@mcp.tool()
+async def create_permission(
+    name: str,
+    description: str,
+    resource: str,
+    resource_group: str,
+    tags: list,
+    project_key: str = "",
+    type: int = 3,
+    dependent_permissions: list = None,
+    is_built_in: bool = False
+) -> str:
+    """
+    Create a new permission.
+    
+    Args:
+        name: Permission name
+        description: Permission description
+        resource: Resource name (arbitrary string)
+        resource_group: Resource group name (arbitrary string)
+        tags: List of action tags (e.g., ["create", "read", "update", "delete"])
+        project_key: Project key (tenant ID). Uses global tenant_id if not provided
+        type: Permission type (default: 3 for "Data protection")
+        dependent_permissions: List of dependent permission IDs (default: [])
+        is_built_in: Whether it's a built-in permission (default: false)
+    
+    Returns:
+        JSON string with permission creation result
+    """
+    try:
+        # Check if authenticated
+        if not is_token_valid():
+            return json.dumps({
+                "status": "error",
+                "message": "Authentication required. Please login first using the login tool."
+            }, indent=2)
+        
+        # Use global tenant_id if project_key is not provided
+        if not project_key:
+            if not app_state["tenant_id"]:
+                return json.dumps({
+                    "status": "error",
+                    "message": "No project key provided and no tenant ID in global state. Please run get_projects or provide project_key."
+                }, indent=2)
+            project_key = app_state["tenant_id"]
+        
+        if dependent_permissions is None:
+            dependent_permissions = []
+        
+        headers = get_auth_headers()
+        
+        payload = {
+            "name": name,
+            "type": type,
+            "resource": resource,
+            "resourceGroup": resource_group,
+            "tags": tags,
+            "description": description,
+            "dependentPermissions": dependent_permissions,
+            "projectKey": project_key,
+            "isBuiltIn": is_built_in
+        }
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                API_CONFIG["IAM_CREATE_PERMISSION_URL"],
+                headers=headers,
+                json=payload,
+                timeout=30.0
+            )
+            response.raise_for_status()
+            create_data = response.json()
+        
+        if create_data.get("isSuccess"):
+            # Get updated permission list to show the result
+            try:
+                list_result = await list_permissions(project_key)
+                list_data = json.loads(list_result)
+                updated_permissions = list_data.get("permissions", []) if list_data.get("status") == "success" else []
+            except Exception:
+                updated_permissions = []
+            
+            result = {
+                "status": "success",
+                "message": f"Permission '{name}' created successfully",
+                "permission_details": {
+                    "name": name,
+                    "description": description,
+                    "resource": resource,
+                    "resource_group": resource_group,
+                    "tags": tags,
+                    "type": type,
+                    "project_key": project_key,
+                    "item_id": create_data.get("itemId")
+                },
+                "response": create_data,
+                "updated_permissions": updated_permissions
+            }
+        else:
+            result = {
+                "status": "error",
+                "message": "Failed to create permission",
+                "errors": create_data.get("errors"),
+                "response": create_data
+            }
+        
+        return json.dumps(result, indent=2)
+        
+    except httpx.HTTPStatusError as e:
+        return json.dumps({
+            "status": "error",
+            "message": f"HTTP error creating permission: {e.response.status_code}",
+            "details": e.response.text
+        }, indent=2)
+    
+    except Exception as e:
+        return json.dumps({
+            "status": "error",
+            "message": f"Error creating permission: {str(e)}"
+        }, indent=2)
+
+
+@mcp.tool()
+async def update_permission(
+    item_id: str,
+    name: str,
+    description: str,
+    resource: str,
+    resource_group: str,
+    tags: list,
+    project_key: str = "",
+    type: int = 3,
+    dependent_permissions: list = None,
+    is_built_in: bool = False
+) -> str:
+    """
+    Update an existing permission.
+    
+    Args:
+        item_id: The ID of the permission to update
+        name: Permission name
+        description: Permission description
+        resource: Resource name (arbitrary string)
+        resource_group: Resource group name (arbitrary string)
+        tags: List of action tags (e.g., ["create", "read", "update", "delete"])
+        project_key: Project key (tenant ID). Uses global tenant_id if not provided
+        type: Permission type (default: 3 for "Data protection")
+        dependent_permissions: List of dependent permission IDs (default: [])
+        is_built_in: Whether it's a built-in permission (default: false)
+    
+    Returns:
+        JSON string with permission update result
+    """
+    try:
+        # Check if authenticated
+        if not is_token_valid():
+            return json.dumps({
+                "status": "error",
+                "message": "Authentication required. Please login first using the login tool."
+            }, indent=2)
+        
+        # Use global tenant_id if project_key is not provided
+        if not project_key:
+            if not app_state["tenant_id"]:
+                return json.dumps({
+                    "status": "error",
+                    "message": "No project key provided and no tenant ID in global state. Please run get_projects or provide project_key."
+                }, indent=2)
+            project_key = app_state["tenant_id"]
+        
+        if dependent_permissions is None:
+            dependent_permissions = []
+        
+        headers = get_auth_headers()
+        
+        payload = {
+            "name": name,
+            "type": type,
+            "resource": resource,
+            "resourceGroup": resource_group,
+            "tags": tags,
+            "description": description,
+            "dependentPermissions": dependent_permissions,
+            "projectKey": project_key,
+            "isBuiltIn": is_built_in,
+            "itemId": item_id
+        }
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                API_CONFIG["IAM_UPDATE_PERMISSION_URL"],
+                headers=headers,
+                json=payload,
+                timeout=30.0
+            )
+            response.raise_for_status()
+            update_data = response.json()
+        
+        if update_data.get("isSuccess"):
+            # Get updated permission list to confirm the change
+            try:
+                list_result = await list_permissions(project_key)
+                list_data = json.loads(list_result)
+                updated_permissions = list_data.get("permissions", []) if list_data.get("status") == "success" else []
+            except Exception:
+                updated_permissions = []
+            
+            result = {
+                "status": "success",
+                "message": f"Permission '{name}' updated successfully",
+                "permission_details": {
+                    "item_id": item_id,
+                    "name": name,
+                    "description": description,
+                    "resource": resource,
+                    "resource_group": resource_group,
+                    "tags": tags,
+                    "type": type,
+                    "project_key": project_key
+                },
+                "response": update_data,
+                "updated_permissions": updated_permissions
+            }
+        else:
+            result = {
+                "status": "error",
+                "message": "Failed to update permission",
+                "errors": update_data.get("errors"),
+                "response": update_data
+            }
+        
+        return json.dumps(result, indent=2)
+        
+    except httpx.HTTPStatusError as e:
+        return json.dumps({
+            "status": "error",
+            "message": f"HTTP error updating permission: {e.response.status_code}",
+            "details": e.response.text
+        }, indent=2)
+    
+    except Exception as e:
+        return json.dumps({
+            "status": "error",
+            "message": f"Error updating permission: {str(e)}"
+        }, indent=2)
+
+
+@mcp.tool()
+async def get_resource_groups(project_key: str = "") -> str:
+    """
+    Get available resource groups for a project.
+    
+    Args:
+        project_key: Project key (tenant ID). Uses global tenant_id if not provided
+    
+    Returns:
+        JSON string with resource groups result
+    """
+    try:
+        # Check if authenticated
+        if not is_token_valid():
+            return json.dumps({
+                "status": "error",
+                "message": "Authentication required. Please login first using the login tool."
+            }, indent=2)
+        
+        # Use global tenant_id if project_key is not provided
+        if not project_key:
+            if not app_state["tenant_id"]:
+                return json.dumps({
+                    "status": "error",
+                    "message": "No project key provided and no tenant ID in global state. Please run get_projects or provide project_key."
+                }, indent=2)
+            project_key = app_state["tenant_id"]
+        
+        headers = get_auth_headers()
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{API_CONFIG['IAM_GET_RESOURCE_GROUPS_URL']}?ProjectKey={project_key}",
+                headers=headers,
+                timeout=30.0
+            )
+            response.raise_for_status()
+            groups_data = response.json()
+        
+        result = {
+            "status": "success",
+            "message": f"Found {len(groups_data)} resource group(s)",
+            "project_key": project_key,
+            "resource_groups": groups_data,
+            "summary": []
+        }
+        
+        # Add summary for easier reading
+        for group in groups_data:
+            result["summary"].append({
+                "resource_group": group.get("resourceGroup"),
+                "count": group.get("count", 0)
+            })
+        
+        return json.dumps(result, indent=2)
+        
+    except httpx.HTTPStatusError as e:
+        return json.dumps({
+            "status": "error",
+            "message": f"HTTP error getting resource groups: {e.response.status_code}",
+            "details": e.response.text
+        }, indent=2)
+    
+    except Exception as e:
+        return json.dumps({
+            "status": "error",
+            "message": f"Error getting resource groups: {str(e)}"
         }, indent=2)
 
 
