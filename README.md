@@ -242,10 +242,6 @@ All tools return JSON responses with:
 ### Schema/Project Issues
 - Selise cloud doesn't support the same schema names (to be fixed), even for different projects & accounts. If schema creation fails, try a different name. The agent should tell you when it fails due to naming conflicts.
 
-## Security Architecture Discovery
-
-During development, we discovered critical security gaps in Selise Cloud's IAM implementation:
-
 ## API Endpoints
 
 The server communicates with the following Selise Cloud API endpoints:
