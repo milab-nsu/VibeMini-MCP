@@ -21,6 +21,7 @@ auth_state = {
 app_state = {
     "application_domain": None,
     "tenant_id": None,
+    "tenant_group_id": None,
     "project_name": None
 }
 
@@ -46,9 +47,11 @@ API_CONFIG = {
     "IAM_UPDATE_PERMISSION_URL": "https://api.seliseblocks.com/iam/v1/Resource/UpdatePermission",
     "IAM_GET_RESOURCE_GROUPS_URL": "https://api.seliseblocks.com/iam/v1/Resource/GetResourceGroups",
     "IAM_SET_ROLES_URL": "https://api.seliseblocks.com/iam/v1/Resource/SetRoles",
-    "MFA_CONFIG_URL": "https://api.seliseblocks.com/mfa/v1/Configuration/Save",
     "DATA_GATEWAY_URL": "https://api.seliseblocks.com/graphql/v1/configurations",
     "SAVE_SSO_URL": "https://api.seliseblocks.com/authentication/v1/Social/SaveSsoCredential",
+    "MFA_SAVE_URL": "https://api.seliseblocks.com/mfa/v1/Configuration/Save",
+    "GITHUB_REPOS_URL": "https://api.seliseblocks.com/cloudbuild/v1/github/repos",
+    "RUN_BUILD_URL": "https://api.seliseblocks.com/cloudbuild/v1/build/run-build",
     "HEADERS": {
         "x-blocks-key": "d7e5554c758541db8a18694b64ef423d",
         "Origin": "https://cloud.seliseblocks.com",
@@ -848,7 +851,7 @@ async def activate_social_login(
         refresh_token_minutes: Refresh token validity in minutes (default: 300)
         access_token_minutes: Access token validity in minutes (default: 15)
         remember_me_minutes: Remember me token validity in minutes (default: 43200)
-        allowed_grant_types: List of allowed grant types (default: ["password", "refresh_token", "mfa_code", "social"])
+        allowed_grant_types: List of allowed grant types (default: ["password", "refresh_token", "social"])
         wrong_attempts_lock: Number of wrong attempts to lock account (default: 5)
         lock_duration_minutes: Account lock duration in minutes (default: 5)
     
@@ -874,7 +877,7 @@ async def activate_social_login(
         
         # Set default allowed grant types if not provided
         if allowed_grant_types is None:
-            allowed_grant_types = ["password", "refresh_token", "mfa_code", "social"]
+            allowed_grant_types = ["password", "refresh_token", "social"]
         
         # Prepare headers matching the curl example
         headers = {
@@ -1046,7 +1049,7 @@ async def get_authentication_config(project_key: str = "") -> str:
 
 
 @mcp.tool()
-async def set_application_domain(domain: str, tenant_id: str, project_name: str = "") -> str:
+async def set_application_domain(domain: str, tenant_id: str, project_name: str = "", tenant_group_id: str = "") -> str:
     """
     Manually set the application domain and tenant ID for repository creation.
     
@@ -1054,6 +1057,7 @@ async def set_application_domain(domain: str, tenant_id: str, project_name: str 
         domain: Application domain URL
         tenant_id: Tenant ID for the project
         project_name: Project name (optional)
+        tenant_group_id: Tenant Group ID (optional)
     
     Returns:
         JSON string with confirmation
@@ -1061,6 +1065,8 @@ async def set_application_domain(domain: str, tenant_id: str, project_name: str 
     app_state["application_domain"] = domain
     app_state["tenant_id"] = tenant_id
     app_state["project_name"] = project_name
+    if tenant_group_id:
+        app_state["tenant_group_id"] = tenant_group_id
     
     return json.dumps({
         "status": "success",
@@ -1180,7 +1186,8 @@ async def create_local_repository(repository_name: str = "",
                 "command_used": command,
                 "output": result["stdout"],
                 "tenant_id": app_state["tenant_id"],
-                "application_domain": app_state["application_domain"]
+                "application_domain": app_state["application_domain"],
+                "git_prompt": "Git initialization is mandatory for deployment to Selise Cloud. Use the 'init_git_repository' tool to initialize git with your GitHub repository."
             }, indent=2)
         else:
             return json.dumps({
@@ -1195,6 +1202,73 @@ async def create_local_repository(repository_name: str = "",
         return json.dumps({
             "status": "error",
             "message": f"Error during repository creation: {str(e)}"
+        }, indent=2)
+
+
+@mcp.tool()
+async def init_git_repository(github_name: str, repo_name: str, directory_path: str = ".") -> str:
+    """
+    Initialize a git repository with the specified remote origin and push to dev branch.
+    
+    Args:
+        github_name: GitHub username or organization name
+        repo_name: Repository name on GitHub
+        directory_path: Path to the directory to initialize (default: current directory)
+    
+    Returns:
+        JSON string with git initialization result
+    """
+    try:
+        import os
+        
+        # Change to the specified directory if provided
+        if directory_path != ".":
+            if not os.path.exists(directory_path):
+                return json.dumps({
+                    "status": "error",
+                    "message": f"Directory '{directory_path}' does not exist"
+                }, indent=2)
+            os.chdir(directory_path)
+        
+        commands = [
+            "git init",
+            f"git remote add origin https://github.com/{github_name}/{repo_name}",
+            "git branch -M dev", 
+            "git add .",
+            "git commit -m 'feat: initiate project'",
+            "git push -u origin dev"
+        ]
+        
+        results = []
+        for command in commands:
+            result = await run_command(command)
+            results.append({
+                "command": command,
+                "success": result["success"],
+                "stdout": result["stdout"],
+                "stderr": result["stderr"]
+            })
+            
+            # If any command fails, return the error
+            if not result["success"]:
+                return json.dumps({
+                    "status": "error",
+                    "message": f"Git initialization failed at command: {command}",
+                    "error": result["stderr"],
+                    "commands_executed": results
+                }, indent=2)
+        
+        return json.dumps({
+            "status": "success",
+            "message": f"Git repository initialized successfully with remote origin: https://github.com/{github_name}/{repo_name}",
+            "branch": "dev",
+            "commands_executed": results
+        }, indent=2)
+        
+    except Exception as e:
+        return json.dumps({
+            "status": "error",
+            "message": f"Error during git initialization: {str(e)}"
         }, indent=2)
 
 
@@ -1274,6 +1348,7 @@ async def create_project(
         
         if tenant_id:
             app_state["tenant_id"] = tenant_id
+            app_state["tenant_group_id"] = tenant_group_id
             app_state["project_name"] = project_name
             
             # Try to get the real application domain using the new method
@@ -2523,135 +2598,12 @@ async def get_role_permissions(
         }, indent=2)
 
 
-@mcp.tool()
-async def enable_mfa(
-    project_key: str = "",
-    mfa_types: list = None
-) -> str:
-    """
-    Enable Multi-Factor Authentication (MFA) for a project with custom types.
-    
-    Args:
-        project_key: Project key (tenant ID). Uses global tenant_id if not provided
-        mfa_types: List of MFA types to enable (e.g., ["email", "authenticator"])
-    
-    Returns:
-        JSON string with MFA configuration result
-    """
-    try:
-        # Check if authenticated
-        if not is_token_valid():
-            return json.dumps({
-                "status": "error",
-                "message": "Authentication required. Please login first using the login tool."
-            }, indent=2)
-        
-        # Use global tenant_id if project_key is not provided
-        if not project_key:
-            if not app_state["tenant_id"]:
-                return json.dumps({
-                    "status": "error",
-                    "message": "No project key provided and no tenant ID in global state. Please run get_projects or provide project_key."
-                }, indent=2)
-            project_key = app_state["tenant_id"]
-        
-        # Set default MFA types if not provided
-        if mfa_types is None:
-            mfa_types = ["email", "authenticator"]
-        
-        headers = get_auth_headers()
-        
-        payload = {
-            "projectKey": project_key,
-            "mfaTypes": mfa_types,
-            "isEnabled": True
-        }
-        
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                API_CONFIG["MFA_CONFIG_URL"],
-                headers=headers,
-                json=payload,
-                timeout=30.0
-            )
-            response.raise_for_status()
-            mfa_data = response.json()
-        
-        if mfa_data.get("success", True):
-            result = {
-                "status": "success",
-                "message": f"MFA enabled successfully with types: {', '.join(mfa_types)}",
-                "config_details": {
-                    "project_key": project_key,
-                    "mfa_types": mfa_types,
-                    "enabled": True
-                },
-                "response": mfa_data
-            }
-        else:
-            result = {
-                "status": "error",
-                "message": "Failed to enable MFA",
-                "errors": mfa_data.get("errors"),
-                "response": mfa_data
-            }
-        
-        return json.dumps(result, indent=2)
-        
-    except httpx.HTTPStatusError as e:
-        return json.dumps({
-            "status": "error",
-            "message": f"HTTP error enabling MFA: {e.response.status_code}",
-            "details": e.response.text
-        }, indent=2)
-    
-    except Exception as e:
-        return json.dumps({
-            "status": "error",
-            "message": f"Error enabling MFA: {str(e)}"
-        }, indent=2)
 
 
-@mcp.tool()
-async def enable_email_mfa(project_key: str = "") -> str:
-    """
-    Enable Email Multi-Factor Authentication for a project.
-    
-    Args:
-        project_key: Project key (tenant ID). Uses global tenant_id if not provided
-    
-    Returns:
-        JSON string with Email MFA configuration result
-    """
-    return await enable_mfa(project_key, ["email"])
 
 
-@mcp.tool()
-async def enable_authenticator_mfa(project_key: str = "") -> str:
-    """
-    Enable Authenticator App Multi-Factor Authentication for a project.
-    
-    Args:
-        project_key: Project key (tenant ID). Uses global tenant_id if not provided
-    
-    Returns:
-        JSON string with Authenticator MFA configuration result
-    """
-    return await enable_mfa(project_key, ["authenticator"])
 
 
-@mcp.tool()
-async def enable_both_mfa_types(project_key: str = "") -> str:
-    """
-    Enable both Email and Authenticator Multi-Factor Authentication for a project.
-    
-    Args:
-        project_key: Project key (tenant ID). Uses global tenant_id if not provided
-    
-    Returns:
-        JSON string with MFA configuration result for both types
-    """
-    return await enable_mfa(project_key, ["email", "authenticator"])
 
 
 @mcp.tool()
@@ -2949,6 +2901,233 @@ async def get_application_domain(item_id: str) -> Optional[str]:
         print(f"Error getting application domain for item {item_id}: {str(e)}")
         return None
 
+
+@mcp.tool()
+async def list_github_repos(project_key: str = "") -> str:
+    """
+    Get all GitHub repositories for a project.
+    
+    Args:
+        project_key: Project key (tenant ID). Uses global tenant_id if not provided
+    
+    Returns:
+        JSON string with GitHub repositories list
+    """
+    try:
+        # Check if authenticated
+        if not is_token_valid():
+            return json.dumps({
+                "status": "error",
+                "message": "Authentication required. Please login first using the login tool."
+            }, indent=2)
+        
+        # Use global tenant_id if project_key is not provided
+        if not project_key:
+            if not app_state["tenant_id"]:
+                return json.dumps({
+                    "status": "error",
+                    "message": "No project key provided and no tenant ID in global state. Please run get_projects or provide project_key."
+                }, indent=2)
+            project_key = app_state["tenant_id"]
+        
+        headers = get_auth_headers()
+        params = {"ProjectKey": project_key}
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                API_CONFIG["GITHUB_REPOS_URL"],
+                headers=headers,
+                params=params,
+                timeout=30.0
+            )
+            response.raise_for_status()
+            repos_data = response.json()
+        
+        result = {
+            "status": "success",
+            "message": f"Found {len(repos_data)} GitHub repository/repositories",
+            "project_key": project_key,
+            "repositories": repos_data,
+            "summary": []
+        }
+        
+        # Add summary for easier reading
+        for repo in repos_data:
+            result["summary"].append({
+                "name": repo.get("name"),
+                "full_name": repo.get("fullName"),
+                "url": repo.get("url"),
+                "description": repo.get("description"),
+                "language": repo.get("language"),
+                "is_private": repo.get("isPrivate"),
+                "default_branch": repo.get("defaultBranch"),
+                "stars": repo.get("stargazersCount", 0),
+                "forks": repo.get("forksCount", 0),
+                "size": repo.get("size", 0),
+                "created_at": repo.get("createdAt"),
+                "updated_at": repo.get("updatedAt")
+            })
+        
+        return json.dumps(result, indent=2)
+        
+    except httpx.HTTPStatusError as e:
+        return json.dumps({
+            "status": "error",
+            "message": f"HTTP error listing GitHub repos: {e.response.status_code}",
+            "details": e.response.text
+        }, indent=2)
+    
+    except Exception as e:
+        return json.dumps({
+            "status": "error",
+            "message": f"Error listing GitHub repos: {str(e)}"
+        }, indent=2)
+
+
+@mcp.tool()
+async def enable_email_mfa(project_key: str = "") -> str:
+    """
+    Enable Email Multi-Factor Authentication for a project.
+    
+    Args:
+        project_key: Project key (tenant ID). Uses global tenant_id if not provided
+    
+    Returns:
+        JSON string with Email MFA configuration result
+    """
+    try:
+        # Check if authenticated
+        if not is_token_valid():
+            return json.dumps({
+                "status": "error",
+                "message": "Authentication required. Please login first using the login tool."
+            }, indent=2)
+        
+        # Use global tenant_id if project_key is not provided
+        if not project_key:
+            if not app_state["tenant_id"]:
+                return json.dumps({
+                    "status": "error",
+                    "message": "No project key provided and no tenant ID in global state. Please run get_projects or provide project_key."
+                }, indent=2)
+            project_key = app_state["tenant_id"]
+        
+        headers = get_auth_headers()
+        payload = {
+            "projectKey": project_key,
+            "enableMfa": True,
+            "userMfaType": [2]  # 2 represents email MFA
+        }
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                API_CONFIG["MFA_SAVE_URL"],
+                headers=headers,
+                json=payload,
+                timeout=30.0
+            )
+            response.raise_for_status()
+            mfa_data = response.json()
+        
+        result = {
+            "status": "success",
+            "message": "Email MFA has been enabled successfully",
+            "project_key": project_key,
+            "mfa_config": {
+                "enabled": True,
+                "type": "email",
+                "type_code": 2
+            },
+            "response_data": mfa_data
+        }
+        
+        return json.dumps(result, indent=2)
+        
+    except httpx.HTTPStatusError as e:
+        return json.dumps({
+            "status": "error",
+            "message": f"HTTP error enabling email MFA: {e.response.status_code}",
+            "details": e.response.text
+        }, indent=2)
+    
+    except Exception as e:
+        return json.dumps({
+            "status": "error",
+            "message": f"Error enabling email MFA: {str(e)}"
+        }, indent=2)
+
+@mcp.tool()
+async def enable_authenticator_mfa(project_key: str = "") -> str:
+    """
+    Enable Authenticator Multi-Factor Authentication for a project.
+    
+    Args:
+        project_key: Project key (tenant ID). Uses global tenant_id if not provided
+    
+    Returns:
+        JSON string with Authenticator MFA configuration result
+    """
+    try:
+        # Check if authenticated
+        if not is_token_valid():
+            return json.dumps({
+                "status": "error",
+                "message": "Authentication required. Please login first using the login tool."
+            }, indent=2)
+        
+        # Use global tenant_id if project_key is not provided
+        if not project_key:
+            if not app_state["tenant_id"]:
+                return json.dumps({
+                    "status": "error",
+                    "message": "No project key provided and no tenant ID in global state. Please run get_projects or provide project_key."
+                }, indent=2)
+            project_key = app_state["tenant_id"]
+        
+        headers = get_auth_headers()
+        payload = {
+            "projectKey": project_key,
+            "enableMfa": True,
+            "userMfaType": [2, 1]  # 2 = email MFA, 1 = authenticator MFA
+        }
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                API_CONFIG["MFA_SAVE_URL"],
+                headers=headers,
+                json=payload,
+                timeout=30.0
+            )
+            response.raise_for_status()
+            mfa_data = response.json()
+        
+        result = {
+            "status": "success",
+            "message": "Authenticator MFA has been enabled successfully",
+            "project_key": project_key,
+            "mfa_config": {
+                "enabled": True,
+                "type": "authenticator",
+                "type_code": 1,
+                "includes_email": True
+            },
+            "response_data": mfa_data
+        }
+        
+        return json.dumps(result, indent=2)
+        
+    except httpx.HTTPStatusError as e:
+        return json.dumps({
+            "status": "error",
+            "message": f"HTTP error enabling authenticator MFA: {e.response.status_code}",
+            "details": e.response.text
+        }, indent=2)
+    
+    except Exception as e:
+        return json.dumps({
+            "status": "error",
+            "message": f"Error enabling authenticator MFA: {str(e)}"
+        }, indent=2)
 
 if __name__ == "__main__":
     mcp.run()
