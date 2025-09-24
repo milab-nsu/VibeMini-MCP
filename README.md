@@ -1,6 +1,10 @@
-# Selise Cloud MCP Server
+# VibeMini-MCP: Complete Selise Cloud Development System
 
-A comprehensive Model Context Protocol (MCP) server for Selise Cloud platform integration. This server provides 33 MCP tools covering authentication, project management, schema operations, IAM (Identity & Access Management), security configurations, and repository setup within the Selise Cloud ecosystem. Designed for AI agents to streamline enterprise development workflows with complete platform control.
+A comprehensive development system combining:
+1. **MCP Server** - 33 tools for Selise Cloud platform automation 
+2. **LLM Documentation** - Complete development workflows, recipes, and patterns for building Selise Blocks applications
+
+Designed for AI agents (Claude Code, Cursor, etc.) to build production-ready applications with proper multi-user authentication, data isolation, and enterprise security.
 
 ## Features
 
@@ -32,35 +36,95 @@ A comprehensive Model Context Protocol (MCP) server for Selise Cloud platform in
 - **Authentication Configuration**: Social login activation and settings management
 - **Security Headers**: Enterprise-grade API security with proper CORS handling
 
-## Setup
+## 📚 **LLM Documentation System**
 
-### Prerequisites
+### **Complete Development Workflows**
+- **User Interaction Patterns**: How to gather requirements and detect multi-user apps
+- **Feature Planning**: Break down tasks with real-time tracking (TASKS.md, SCRATCHPAD.md)
+- **Schema Design**: NoSQL patterns with automatic business record bridging
+- **Implementation Recipes**: Production-ready patterns for GraphQL, forms, permissions
 
-- Python 3.8 or higher
-- Node.js and npm (for Blocks CLI installation)
-- Claude Code or another MCP-compatible client
+### **Multi-User Application Support**
+- **IAM-to-Business Data Mapping**: Bridge Selise Cloud authentication to business entities
+- **Role-Based Access Control**: Complete RBAC implementation with MCP role management  
+- **Data Isolation**: Ensure users only see their own data with security patterns
+- **Auto-Provisioning**: Automatic user onboarding with business record creation
 
-### Installation
+### **5 Production-Ready Recipes**
+- **graphql-crud.md** - MongoDB/NoSQL GraphQL operations (CRITICAL)
+- **react-hook-form-integration.md** - Form patterns with Zod validation
+- **confirmation-modal-patterns.md** - Standardized confirmation dialogs
+- **iam-to-business-data-mapping.md** - Multi-user data isolation patterns
+- **permissions-and-roles.md** - Complete RBAC implementation guide
 
-1. **Create a virtual environment** (recommended):
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   ```
+### **Component Hierarchy System**
+- **3-Layer Architecture**: Feature → Block → UI component structure
+- **Component Catalog**: Quick reference for all Selise components
+- **Usage Patterns**: When to use AdvanceDataTable, ConfirmationModal, etc.
 
-2. **Install dependencies**:
-   ```bash
-   pip install -r requirements.txt
-   ```
+## Quick Start (Complete Setup)
 
-3. **Add the MCP server to Claude Code**:
-   - Open a folder containing the server files in Claude Code
-   - Run the following command to add the MCP server:
-   ```bash
-   claude mcp add selise-cloud python /absolute/path/to/selise_mcp_server.py
-   ```
+### 1. Clone Repository
+```bash
+git clone https://github.com/milab-nsu/VibeMini-MCP.git
+cd VibeMini-MCP
+```
 
-   Replace `/absolute/path/to/selise_mcp_server.py` with the actual path to your server file.
+### 2. Setup MCP Server
+```bash
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Add MCP server to Claude Code
+claude mcp add selise-cloud python /absolute/path/to/selise_mcp_server.py
+```
+
+### 3. Setup LLM Documentation
+**Choose your AI agent:**
+
+#### For Claude Code:
+```bash
+# Copy main configuration to your project root
+cp llm-docs/CLAUDE.md /path/to/your/project/CLAUDE.md
+
+# Or copy entire llm-docs folder
+cp -r llm-docs /path/to/your/project/llm-docs
+```
+
+#### For Cursor:
+```bash
+# Copy as Cursor rules
+cp llm-docs/CLAUDE.md /path/to/your/project/.cursorrules
+```
+
+### 4. Start Building
+Open your project in Claude Code or Cursor and say:
+
+```
+"Read the CLAUDE.md file in full and help me build a [describe your app]. 
+Make sure to follow all the workflows and recipes."
+```
+
+**For multi-user apps, mention:** "This app will have multiple users with different access levels"
+
+## What You Get
+
+### 🤖 **AI Agent Optimized**
+- **Decision Trees**: Clear guidance for single-user vs multi-user apps
+- **Conditional Workflows**: Only read relevant recipes for your app type
+- **Real-time Tracking**: TASKS.md, SCRATCHPAD.md, FEATURELIST.md stay current
+- **Error Prevention**: NoSQL patterns, security best practices built-in
+
+### 🏗️ **Complete Development Pipeline**
+1. **Requirements Gathering** → Structured user interaction with multi-user detection
+2. **Project Setup** → Automated MCP-based Selise Cloud project creation  
+3. **Schema Design** → NoSQL patterns with user confirmation workflow
+4. **Implementation** → Recipe-driven development with 3-layer architecture
+5. **Testing & Deployment** → Quality checks and git workflow integration
 
 ## Available Tools (33 Total)
 
@@ -285,3 +349,68 @@ This MCP server provides enterprise-grade capabilities:
 - **Comprehensive Error Handling**: Detailed error messages and status codes
 - **Security Headers**: Enterprise CORS and security header management
 - **Token Validation**: Automatic token refresh and expiration handling
+
+## Example Workflow
+
+Here's what happens when you ask Claude Code to "build me a task management app with admin and regular users":
+
+### 1. **Auto-Detection** 🔍
+```
+Agent reads CLAUDE.md → Detects "admin and regular users" → 
+Classifies as MULTI-USER APP → Reads additional recipes:
+- iam-to-business-data-mapping.md
+- permissions-and-roles.md
+```
+
+### 2. **Requirements Gathering** 📝
+```
+Agent follows user-interaction.md patterns:
+- "Will multiple people use this with separate accounts?" ✅
+- "Should each user only see their own tasks?" ✅ 
+- "Do you need admin users who see all tasks?" ✅
+
+Creates: FEATURELIST.md, TASKS.md, SCRATCHPAD.md, CLOUD.md
+```
+
+### 3. **Project Setup** 🚀
+```
+Agent uses MCP tools:
+login() → create_project() → create_local_repository()
+Documents everything in CLOUD.md
+```
+
+### 4. **Schema Design** 📊
+```
+Agent plans NoSQL schemas:
+BusinessRecord (bridges IAM to business data)
+Tasks (with BusinessRecordId for data isolation)
+Asks user: "Does this schema look good?"
+Uses MCP: create_schema() for each entity
+```
+
+### 5. **Implementation** 💻
+```
+Agent follows recipes systematically:
+- GraphQL queries with user filtering (graphql-crud.md)
+- Business record auto-provisioning (iam-to-business-data-mapping.md) 
+- Role-based UI controls (permissions-and-roles.md)
+- Updates TASKS.md: [ ] → [🔄] → [x] for each task
+```
+
+### 6. **Result** ✨
+**Production-ready app with:**
+- ✅ Secure user authentication via Selise Cloud
+- ✅ Data isolation (users only see their own tasks)
+- ✅ Admin panel (admins see all tasks)
+- ✅ Auto-provisioning (new users get business records)
+- ✅ Role-based permissions and UI
+- ✅ NoSQL patterns with proper GraphQL operations
+
+## Getting Started
+
+1. **Clone this repo**
+2. **Setup MCP server** (follow Quick Start above)
+3. **Copy CLAUDE.md to your project**
+4. **Ask your AI agent**: "Read CLAUDE.md and build me a [your app idea]"
+
+The system handles everything from requirements to deployment! 🎉
