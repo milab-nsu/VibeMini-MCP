@@ -74,8 +74,10 @@ This project uses a FastMCP (Model Context Protocol) server for automating Selis
 
 4. **Feature Planning & Schema Design** (AFTER user confirmation):
    - Read `workflows/feature-planning.md` again in full.
+   - **IF MULTI-USER APP**: Read `iam-to-business-data-mapping.md` and `permissions-and-roles.md`
    - Break down confirmed features into technical requirements in Tasks.md
    - Analyze what schemas are needed based on FEATURELIST.md
+   - **For multi-user apps**: Plan business record bridging and user data isolation
    - Document schema plan in CLOUD.md and ask the user if they are okay if not keep talking to the user to confirm the schemas
    - Create schemas using MCP:
      ```python
@@ -105,7 +107,9 @@ llm-docs/
 ├── recipes/                    # Implementation patterns (MUST FOLLOW)
 │   ├── graphql-crud.md         # 🚨 CRITICAL: Only source for data operations!
 │   ├── react-hook-form-integration.md
-│   └── confirmation-modal-patterns.md
+│   ├── confirmation-modal-patterns.md
+│   ├── iam-to-business-data-mapping.md  # Multi-user apps: Bridge IAM to business data
+│   └── permissions-and-roles.md         # Multi-user apps: Role-based access control
 ├── component-catalog/          # Component hierarchy (3-layer rule)
 │   ├── component-quick-reference.md
 │   └── selise-component-hierarchy.md
@@ -118,7 +122,28 @@ llm-docs/
 2. `workflows/feature-planning.md` - BEFORE creating tasks
 3. `recipes/graphql-crud.md` - BEFORE any data operations (NOT inventory!)
 4. `agent-instructions/selise-development-agent.md` - Development patterns
-5. Other recipes as needed
+5. **IF MULTI-USER APP** - Read BEFORE implementation:
+   - `recipes/iam-to-business-data-mapping.md` - Bridge IAM users to business data
+   - `recipes/permissions-and-roles.md` - Role-based access control
+6. Other recipes as needed
+
+**Multi-User App Decision Tree:**
+```
+Does the app have ANY of these characteristics?
+├── Multiple user accounts with different data? ────────────────┐
+├── Admin vs regular user access levels? ──────────────────────┤
+├── Users should only see "their own" data? ───────────────────┤  YES → Multi-User App
+├── Role-based permissions (admin, manager, user)? ────────────┤  READ: iam-to-business + permissions recipes
+├── User profiles or account management? ───────────────────────┤
+├── Different UI based on user type? ──────────────────────────┘
+│
+NO → Single-User App (skip multi-user recipes)
+```
+
+**Multi-User App Keywords to Watch For:**
+- "users", "roles", "admin", "permissions", "accounts", "login", "authentication"
+- "only see their own", "different access", "user management", "multi-tenant" 
+- "manager can see", "admin controls", "user profiles", "role-based"
 
 
 ## 🔄 Development Workflow
@@ -304,6 +329,15 @@ src/features/[feature-name]/
 - ALWAYS use ConfirmationModal
 - Never use browser confirm() or AlertDialog
 - Follow async confirmation pattern
+
+#### Multi-User Apps (from iam-to-business-data-mapping.md & permissions-and-roles.md)
+**🚨 CRITICAL for apps with multiple users:**
+- **IAM Bridging**: Use business record provisioning to bridge IAM users to domain data
+- **Data Isolation**: Filter all queries by business record ID - users only see their data
+- **Role-Based Access**: Use `useUserRole()` hook for permissions and UI control
+- **MCP Role Setup**: MUST create roles in Selise Cloud via MCP before implementing
+- **Security Pattern**: Apply filtering at service layer, not component layer
+- **User Provisioning**: Auto-create business records on first login
 
 ## ⚠️ Common Pitfalls to Avoid
 

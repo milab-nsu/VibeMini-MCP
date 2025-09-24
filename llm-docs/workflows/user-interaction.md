@@ -18,10 +18,24 @@ Let me ask a few questions to ensure I build exactly what you need:
 
 ## Question Templates by Context
 
+### 🚨 CRITICAL: Multi-User Detection (Ask FIRST)
+
+**BEFORE diving into features, determine if this is a multi-user app:**
+
+1. **User Accounts**: "Will multiple people use this app with separate accounts?"
+2. **Data Ownership**: "Should each user only see their own data?"  
+3. **Access Levels**: "Do you need different user types (admin, manager, regular user)?"
+4. **User Management**: "Will there be user registration and login?"
+
+**If ANY answer indicates multiple users → MULTI-USER APP**
+- **IMMEDIATELY note**: "This is a multi-user app - I'll read additional recipes"
+- **ADD to FEATURELIST.md**: User authentication, role management, data isolation
+- **PLAN**: Business record provisioning, role-based access control
+
 ### Universal Questions (Always Ask)
 1. "What are the main features you need?"
 2. "Who will be using this application?"
-3. "Do you need user authentication/login?"
+3. "Do you need user authentication/login?" ← **🚨 Multi-user indicator if yes**
 4. "Should data persist between sessions?"
 5. "Are there any specific workflows or processes this should follow?"
 
@@ -41,7 +55,9 @@ Let me ask a few questions to ensure I build exactly what you need:
 ### For Task/Project Management
 - "Should tasks have categories, tags, or projects?"
 - "Do you need due dates and reminders?"
-- "Will there be multiple users or teams?"
+- "Will there be multiple users or teams?" ← **🚨 Multi-user indicator**
+- "Should each user only see their own tasks?" ← **🚨 Multi-user indicator**
+- "Do you need admin users who can see all tasks?" ← **🚨 Multi-user indicator**
 - "Should tasks have priority levels or status workflows?"
 - "Do you need recurring tasks?"
 
