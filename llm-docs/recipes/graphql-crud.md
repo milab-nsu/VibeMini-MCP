@@ -5,6 +5,44 @@
 **NEVER look at inventory feature for data operations - it uses different patterns!**
 **This recipe is based on actual working Selise Cloud GraphQL patterns.**
 
+## 🚨 CRITICAL: Database & Schema Context
+
+### Selise Uses MongoDB (NoSQL)
+- **No foreign keys or JOINs** - use references via _id fields  
+- **No relational patterns** - this is document-based storage
+- **Relationships** handled in application layer, not database
+- **Flexible schema** but plan fields carefully for consistency
+
+### MANDATORY: Verify Schema Types Before Writing Queries
+Before writing ANY GraphQL queries or services:
+1. **Check CLOUD.md** for documented schemas
+2. **Call MCP tool** to get real field types:
+   ```python
+   get_schema_details(schema_name="YourSchema")
+   ```
+3. **Match your GraphQL field types exactly** to schema types
+4. **Common type mappings**:
+   - String → GraphQL String
+   - Number → GraphQL Float/Int  
+   - Boolean → GraphQL Boolean
+   - DateTime → GraphQL String (ISO format)
+   - Reference → String (stores _id of referenced document)
+
+### NoSQL Schema Design Patterns
+```javascript
+// ❌ WRONG - Relational thinking
+{
+  user_id: "foreign_key",  // Don't think in foreign keys
+  product_id: "foreign_key"
+}
+
+// ✅ CORRECT - Document references
+{
+  userId: "507f1f77bcf86cd799439011",  // MongoDB ObjectId as string
+  productId: "507f1f77bcf86cd799439012"
+}
+```
+
 ## GraphQL Naming Patterns You MUST Know
 
 ### 1. Correct Schema Name Pattern (Updated)

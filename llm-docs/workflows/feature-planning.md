@@ -5,55 +5,87 @@ This guide explains how to break down user requirements into actionable tasks an
 
 ## Required Files Structure
 
-### 1. FEATURELIST.md - Source of Truth
+### 1. FEATURELIST.md - Source of Truth (UPDATE TRIGGERS)
+
+**When to Update FEATURELIST.md:**
+- ✅ **Task completion**: When all TASKS.md items for a feature are complete
+- ✅ **Scope changes**: When user adds/removes/modifies features  
+- ✅ **Feature discovery**: When implementation reveals new requirements
+- ✅ **Version planning**: When preparing next sprint/release
+
 ```markdown
 # Feature List for [App Name]
 
 ## Version 1.0 (Current Sprint)
-- [x] User authentication
-- [x] Basic CRUD for [entity]
-- [ ] Search and filtering
+- [x] User authentication ← Mark [x] when ALL auth tasks complete in TASKS.md
+- [x] Basic CRUD for [entity] ← Mark [x] when ALL CRUD tasks complete
+- [🔄] Search and filtering ← Mark [🔄] when any related task starts
 - [ ] Export functionality
 
-## Version 1.1 (Next Sprint)
+## Version 1.1 (Next Sprint)  
 - [ ] Advanced permissions
 - [ ] Bulk operations
 - [ ] Email notifications
 
+## Recently Added (During Development)
+- [ ] User profile management ← Add here if discovered during implementation
+- [ ] Data validation improvements
+
 ## Technical Debt
 - [ ] Optimize GraphQL queries
-- [ ] Add comprehensive error handling
+- [ ] Add comprehensive error handling  
 - [ ] Improve loading states
+
+## Status Legend
+- [ ] Not started
+- [🔄] In progress (at least one related task active in TASKS.md)
+- [x] Complete (all related tasks complete in TASKS.md)
 ```
 
-### 2. TASKS.md - Implementation Tracking
+### 2. TASKS.md - Implementation Tracking (EXECUTION DOCUMENT)
 ```markdown
 # Development Tasks
 
-## Current Sprint
+## Setup & Configuration
+- [ ] Initialize project structure
+- [ ] Configure GraphQL client  
+- [ ] Setup routing
+- [ ] Remove default sidebar (check if navigation needed)
 
-### ✅ Setup Project Structure
-- Created basic layout
-- Setup routing
-- Configured GraphQL client
+## Feature: [Feature Name from FEATURELIST.md]
 
-### 🔄 User Authentication
-- [x] Create login form
-- [x] Setup auth context
-- [ ] Add password reset
-- [ ] Remember me functionality
+### Backend Integration
+- [ ] Check CLOUD.md for schema documentation
+- [ ] Call get_schema_details("SchemaName") to verify field types
+- [ ] Create GraphQL queries matching exact schema types
+- [ ] Create GraphQL mutations with correct input types
+- [ ] Setup React Query hooks
 
-### ⏳ Data Management
-- [ ] Create entity list view
-- [ ] Add create/edit forms
-- [ ] Implement delete with confirmation
-- [ ] Add search and filters
+### UI Components  
+- [ ] Create list view with AdvanceDataTable
+- [ ] Create add/edit forms with React Hook Form
+- [ ] Add ConfirmationModal for delete operations
+- [ ] Hide sidebar unless TASKS require navigation
+- [ ] Remove "design only" labels if present
 
-### 📋 Backlog
-- Performance optimizations
-- Additional validations
-- Analytics integration
+### Data Operations
+- [ ] Test Create operation - verify types match
+- [ ] Test Read/List operation - check pagination
+- [ ] Test Update operation - verify _id filtering
+- [ ] Test Delete operation - soft delete by default
+
+### Quality Checks
+- [ ] Run linting (npm run lint)
+- [ ] Run type checking  
+- [ ] Test all CRUD operations
+- [ ] Verify NoSQL patterns (no JOINs, use references)
 ```
+
+**IMPORTANT**: 
+- Tasks should be **granular and executable** (complete in 15-30 min)
+- Update status immediately: `[ ]` → `[🔄]` → `[x]`
+- If a task reveals more work, add sub-tasks below it
+- **This is your execution guide** - work through it linearly
 
 ### 3. SCRATCHPAD.md - Append-Only Notes (TOP)
 ```markdown
@@ -371,13 +403,57 @@ src/features/[your-feature]/
 3. **Follow service patterns** for consistency
 4. **Use same export approach** in index.ts
 
+## CRITICAL: After Tasks.md Creation
+
+### Continue to Implementation (CLAUDE.md Step 5)
+Once TASKS.md is populated with technical tasks:
+1. **STOP** - Do not start implementing yet
+2. **Return to CLAUDE.md step 5**: "Implementation Process"  
+3. **Work through TASKS.md line by line**:
+   - Pick first `[ ]` task
+   - Change to `[🔄]` when starting
+   - Implement following recipes
+   - Mark `[x]` when complete
+   - Update SCRATCHPAD.md with notes
+4. **NEVER** skip ahead in TASKS.md
+5. **ALWAYS** complete current task before moving to next
+6. **If blocked**: Document in SCRATCHPAD.md and move to next task
+
+### Implementation Flow with Tracking Updates
+```
+TASKS.md → Pick Task → Update [🔄] → Implement → Test → Update [x] → Commit → Next
+     ↑         ↓                         ↓         ↓        ↓           ↓        ↓
+     └── SCRATCHPAD.md ← Log decisions ← Log errors ← Log fixes ← Update notes ──┘
+              ↓
+         FEATURELIST.md ← Update when feature complete
+              ↓
+         CLOUD.md ← Update if schemas/config changed
+```
+
+### Commit & Update Rhythm
+```bash
+# EVERY TASK COMPLETION:
+1. Update TASKS.md: [🔄] → [x]
+2. Add to SCRATCHPAD.md: Implementation notes
+3. Git add all changes (code + tracking files)
+4. Commit with descriptive message
+5. Move to next task
+
+# EVERY FEATURE COMPLETION:
+1. Update FEATURELIST.md: Mark feature complete
+2. Review all related TASKS.md items are [x]
+3. Major commit with feature summary
+4. Consider merging to main
+```
+
 ## Best Practices
 
 1. **Study inventory first** - MANDATORY before any feature work
 2. **One task at a time** - Focus prevents context switching
-3. **Document blockers** immediately in SCRATCHPAD.md
-4. **Update status** as you work, not after
+3. **Document blockers** immediately in SCRATCHPAD.md with `[⚠️]`
+4. **Update status IN REAL-TIME** - Not after, but AS you work
 5. **Reference existing code** - Check src/features/ for patterns
 6. **Test incrementally** - Don't wait until end
-7. **Commit frequently** - Small, logical commits
+7. **Commit frequently** - After EVERY task completion (not just features)
 8. **Screenshot Selise Cloud** configs for CLOUD.md
+9. **Keep tracking files current** - They're your source of truth

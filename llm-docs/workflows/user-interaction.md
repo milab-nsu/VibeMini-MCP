@@ -167,8 +167,31 @@ create_local_repository(project_name=project_name)
 For each confirmed feature, determine:
 - **Data entities needed** (Users, Tasks, Categories, etc.)
 - **Entity fields and types** (title: String, status: Enum, etc.)
-- **Relationships** (Task belongs to User, etc.)
+- **Relationships** (Task belongs to User, etc. - remember NoSQL uses references, not foreign keys)
 - **Permissions required** (admin can delete, users can edit own)
+
+#### Schema Confirmation with User
+After documenting schemas in CLOUD.md, **ALWAYS get user confirmation**:
+
+```
+I've documented the schema plan. Here are the entities I'll create:
+
+**Tasks Entity**
+- title (String): Task title
+- description (String): Task details  
+- status (String): pending/completed
+- dueDate (DateTime): Due date
+- userId (String): Reference to User who owns this task
+
+**Categories Entity** 
+- name (String): Category name
+- color (String): Display color
+- userId (String): Reference to User
+
+Does this schema structure look good to you, or would you like any changes?
+```
+
+Wait for user confirmation before creating schemas with MCP.
 
 #### CLOUD.md Population Template
 ```markdown
@@ -203,6 +226,19 @@ Based on confirmed features:
 - Operation: configurePermissions('User', {...})
 - Result: Successfully configured role-based access
 ```
+
+#### Transition to Implementation
+After schemas are created successfully:
+
+```
+Great! I've set up the backend schemas. Now I'll work through the implementation tasks in TASKS.md systematically.
+
+[Internal: Switch to CLAUDE.md step 5 - Work from TASKS.md]
+[Internal: Start with first uncompleted task in TASKS.md]
+[Internal: Update task status as you work: [ ] → [🔄] → [x]]
+```
+
+**CRITICAL**: Do NOT start implementing randomly. Follow TASKS.md line by line.
 
 ## Handling Unclear Requirements
 

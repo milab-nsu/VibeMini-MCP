@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-**MUST DO: READ LLM DOCS: llm-docs/ as per the usage guidelines in this file. Don't implement or do anything without following this step. if you fail to find it, do a full directory search first. dont just start path guidance:  ~/Desktop/selise-demo via ❯ ls CLAUDE.md            llm-docs             selise_mcp_server.py user-info.txt**
+**MUST DO: READ LLM DOCS: llm-docs/ as per the usage guidelines in this file. Don't implement or do anything without following this step. if you fail to find it, do a full directory search first, go back forward etc. dont just start path guidance:  /llm-docs**
 
 This file provides guidance to Claude Code (claude.ai/code) when working with Selise Blocks applications.
 
@@ -47,6 +47,7 @@ This project uses a FastMCP (Model Context Protocol) server for automating Selis
    - Create tracking files: `FEATURELIST.md`, `TASKS.md`, `SCRATCHPAD.md`, `CLOUD.md`
    - Ask clarifying questions about features
    - Document everything in FEATURELIST.md
+   - Create tasks.md
    - Get user confirmation before proceeding
 
 3. **Project Setup** (After user confirms features):
@@ -72,9 +73,10 @@ This project uses a FastMCP (Model Context Protocol) server for automating Selis
      ```
 
 4. **Feature Planning & Schema Design** (AFTER user confirmation):
-   - Break down confirmed features into technical requirements
+   - Read `workflows/feature-planning.md` again in full.
+   - Break down confirmed features into technical requirements in Tasks.md
    - Analyze what schemas are needed based on FEATURELIST.md
-   - Document schema plan in CLOUD.md
+   - Document schema plan in CLOUD.md and ask the user if they are okay if not keep talking to the user to confirm the schemas
    - Create schemas using MCP:
      ```python
      # For each entity the app needs:
@@ -87,7 +89,9 @@ This project uses a FastMCP (Model Context Protocol) server for automating Selis
      )
      ```
    - Document all MCP operations and results in CLOUD.md
-   -  
+   - **CONTINUE TO STEP 5 BELOW** - Do not stop here!
+   - Move to the next steps as listed here, follow this strictly
+   - **After schemas are created, proceed immediately to Implementation Process (Step 5)** 
 
 ## 📚 FIRST: Read All Documentation
 
@@ -121,15 +125,48 @@ llm-docs/
 
 **FOLLOW THE VIBECODING EXPERIENCE FLOW ABOVE FIRST!**
 
+### Continuous Update Cycle
+```
+┌─────────────────────────────────────────────────┐
+│  Pick Task → Update Status → Implement → Test   │
+│      ↓            ↓             ↓          ↓     │
+│  TASKS.md    TASKS.md      SCRATCHPAD   Code    │
+│   [ ]→[🔄]      [🔄]          Notes              │
+│      ↓            ↓             ↓          ↓     │
+│   Commit → Update Status → Next Task → Repeat   │
+│              TASKS.md [x]                        │
+│            FEATURELIST.md                        │
+└─────────────────────────────────────────────────┘
+```
+
 After completing steps 1-4 of the Vibecoding Experience Flow, continue with implementation:
 
 ### 5. Implementation Process (Using Your Tracking Files)
 
-#### Step 1: Work from TASKS.md
-- Reference TASKS.md for your implementation plan
-- Update task status as you work: `[ ]` → `[🔄]` → `[x]`
-- Break down each feature from FEATURELIST.md into specific tasks
-- Document progress and decisions in SCRATCHPAD.md
+#### Step 1: Work from TASKS.md (WITH CONTINUOUS UPDATES)
+
+**Update Frequency:**
+- **TASKS.md**: Update IMMEDIATELY when:
+  - Starting a task: `[ ]` → `[🔄]`
+  - Completing a task: `[🔄]` → `[x]`
+  - Discovering sub-tasks: Add below parent task
+  - Encountering blockers: Add `[⚠️]` and note in SCRATCHPAD.md
+
+- **SCRATCHPAD.md**: Update CONTINUOUSLY:
+  - Every decision made
+  - Every error encountered and fix
+  - Every insight or pattern discovered
+  - Format: `[timestamp] Topic: Details`
+
+- **FEATURELIST.md**: Update when:
+  - Feature completed: Mark `[x]`
+  - Scope changes: Document what changed
+  - New feature discovered: Add to backlog
+
+- **CLOUD.md**: Update when:
+  - Schema modified
+  - New MCP operations performed
+  - Configuration changes made
 
 #### Step 2: Frontend Implementation  
 - Follow recipes from llm-docs/recipes/
@@ -144,44 +181,48 @@ After completing steps 1-4 of the Vibecoding Experience Flow, continue with impl
 - Mark testing tasks complete in TASKS.md
 
 #### Step 4: Sidebar Management (CRITICAL)
-**🚨 DEFAULT: Hide ALL sidebar items - start with clean slate!**
+**🚨 SIDEBAR RULES:**
 
-```typescript
-// By default, REMOVE or HIDE all existing sidebar items
-// Only add navigation if the app actually needs it
+1. **DEFAULT = NO SIDEBAR** - Hide/remove unless TASKS.md explicitly requires navigation
+2. **Check TASKS.md first** - Only add sidebar if tasks mention "navigation", "menu", or "sidebar"  
+3. **Remove ALL template items** - No inventory, IAM, invoices, or "design only" labels
+4. **If sidebar needed (per TASKS.md)**:
+   ```typescript
+   // Start with empty array - remove ALL defaults
+   const sidebarItems = []; 
+   
+   // Only add items that match user's actual features
+   // Example for task management app (if TASKS.md requires navigation):
+   const sidebarItems = [
+     { label: 'Dashboard', path: '/dashboard', icon: 'home' },
+     { label: 'Tasks', path: '/tasks', icon: 'list' },
+     { label: 'Settings', path: '/settings', icon: 'settings' }
+   ];
+   ```
+5. **Remove "design only" label** - Delete any placeholder text/labels
 
-// Option 1: No sidebar at all (most apps)
-// Just remove AppSidebar component entirely
+**Implementation approach:**
+- First check: Does TASKS.md have a task for navigation/sidebar?
+- If NO: Remove AppSidebar component entirely
+- If YES: Empty the default items, add only what's needed
 
-// Option 2: Custom sidebar (only if needed)
-// If user's app needs navigation:
-// 1. Hide ALL default items (inventory, IAM, etc.)
-// 2. Add ONLY items for user's features
-// 3. Example for task management app:
-const sidebarItems = [
-  { label: 'Dashboard', path: '/dashboard', icon: 'home' },
-  { label: 'Tasks', path: '/tasks', icon: 'list' },
-  { label: 'Settings', path: '/settings', icon: 'settings' }
-];
-// Remove ALL demo/template items!
-```
+#### Step 5: Git Workflow (COMMIT FREQUENTLY WITH UPDATED TRACKING)
 
-**Never show irrelevant items like inventory, invoices, IAM unless the user specifically requested those features!**
+**Commit Frequency: After EVERY completed task or sub-task**
 
-#### Step 5: Git Workflow (Update Tracking Files)
 ```bash
 # Branch for each feature
 git checkout -b feature/[task-name]
 
-# After implementation
-git add .
-git diff --staged  # Review changes
+# BEFORE EVERY COMMIT - Update tracking files:
+# 1. Update TASKS.md - mark current task [x]
+# 2. Update SCRATCHPAD.md - add implementation notes
+# 3. Update FEATURELIST.md - if feature complete
+# 4. Update CLOUD.md - if schemas/config changed
 
-# Update your tracking files before commit:
-# - Mark task complete in TASKS.md: [x] 
-# - Add notes to SCRATCHPAD.md about what was implemented
-# - Update FEATURELIST.md if scope changed
-# - Document any schema changes in CLOUD.md
+# Then commit:
+git add .
+git diff --staged  # Review ALL changes including tracking files
 
 # Compliance checklist:
 # - Used MCP for schema creation?
