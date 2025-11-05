@@ -1,10 +1,8 @@
 # VibeMini-MCP: Complete Selise Cloud Development System
 
 A comprehensive development system combining:
-1. **MCP Server** - 35 tools for Selise Cloud platform automation and frontend development documentation
-2. **LLM Documentation** - Complete development workflows, recipes, and patterns hosted on GitHub
-
-The MCP server now handles both **Selise Cloud backend operations** (33 tools) and **frontend development guidance** (2 documentation tools), providing a complete end-to-end development experience.
+1. **MCP Server** - 33 tools for Selise Cloud platform automation 
+2. **LLM Documentation** - Complete development workflows, recipes, and patterns for building Selise Blocks applications
 
 Designed for AI agents (Claude Code, Cursor, etc.) to build production-ready applications with proper multi-user authentication, data isolation, and enterprise security.
 
@@ -37,12 +35,6 @@ Designed for AI agents (Claude Code, Cursor, etc.) to build production-ready app
 - **Global State Management**: Track authentication, domains, and project context
 - **Authentication Configuration**: Social login activation and settings management
 - **Security Headers**: Enterprise-grade API security with proper CORS handling
-
-### 📚 **Documentation Tools (NEW)**
-- **list_sections**: Discover all 16 available documentation topics from GitHub
-- **get_documentation**: Fetch specific workflows, recipes, and patterns on-demand
-- **GitHub Integration**: Always up-to-date documentation fetched directly from repository
-- **Covers**: Project setup, GraphQL CRUD, React patterns, IAM mapping, architecture, and more
 
 ## 📚 **LLM Documentation System**
 
@@ -91,33 +83,33 @@ pip install -r requirements.txt
 claude mcp add selise-cloud python /absolute/path/to/selise_mcp_server.py
 ```
 
-### 3. Access Documentation (via MCP Tools)
-**Documentation is now accessed directly via MCP tools - no local files needed:**
+### 3. Setup LLM Documentation
+**Choose your AI agent:**
 
-```python
-# Use MCP tools in your AI agent (Claude Code, Cursor, etc.):
+#### For Claude Code:
+```bash
+# Copy main configuration to your project root
+cp llm-docs/CLAUDE.md /path/to/your/project/CLAUDE.md
 
-# 1. Discover all available documentation topics
-list_sections()
-
-# 2. Fetch specific documentation as needed
-get_documentation("project-setup")
-get_documentation(["graphql-crud", "architecture-patterns"])
+# Or copy entire llm-docs folder
+cp -r llm-docs /path/to/your/project/llm-docs
 ```
 
-**Documentation Repository:** https://github.com/mustavikhan05/selise-blocks-docs
+#### For Cursor:
+```bash
+# Copy as Cursor rules
+cp llm-docs/CLAUDE.md /path/to/your/project/.cursorrules
+```
 
 ### 4. Start Building
 Open your project in Claude Code or Cursor and say:
 
 ```
-"Use list_sections to discover available documentation, then help me build a [describe your app].
-Fetch relevant workflows and recipes using get_documentation as needed."
+"Read the CLAUDE.md file in full and help me build a [describe your app]. 
+Make sure to follow all the workflows and recipes."
 ```
 
 **For multi-user apps, mention:** "This app will have multiple users with different access levels"
-
-The MCP server will automatically fetch relevant documentation from GitHub as needed.
 
 ## What You Get
 
@@ -134,7 +126,7 @@ The MCP server will automatically fetch relevant documentation from GitHub as ne
 4. **Implementation** → Recipe-driven development with 3-layer architecture
 5. **Testing & Deployment** → Quality checks and git workflow integration
 
-## Available Tools (35 Total)
+## Available Tools (33 Total)
 
 ### 🔐 Authentication & Core (3 tools)
 - `login(username, password)` - Authenticate with Selise Cloud API
@@ -192,10 +184,6 @@ The MCP server will automatically fetch relevant documentation from GitHub as ne
 
 ### 🔑 Single Sign-On (1 tool)
 - `add_sso_credential(provider, client_id, client_secret, project_key, is_enable, redirect_uri)` - Add OAuth SSO credentials for providers (Google, Facebook, GitHub, etc.)
-
-### 📚 Documentation Access (2 tools)
-- `list_sections()` - Discover all 16 available documentation topics from GitHub with metadata
-- `get_documentation(topic)` - Fetch specific documentation by topic ID (single or multiple topics)
 
 ## Usage Examples
 
