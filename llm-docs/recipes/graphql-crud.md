@@ -7,42 +7,84 @@
 
 ## GraphQL Naming Patterns You MUST Know
 
-### 1. Correct Schema Name Pattern (Updated)
+### 1. Correct Schema Name Pattern (Updated 2025-11-08 - VERIFIED WORKING)
 ```typescript
-// CRITICAL: Get schema name from MCP first, then apply these patterns:
-// Schema: "TodoTask" → Query field: "TodoTasks" (schema name + single 's')
-// Schema: "Product" → Query field: "Products" (schema name + single 's')
-// Schema: "User" → Query field: "Users" (schema name + single 's')
+// 🚨 ACTUAL NAMING CONVENTION - Based on real working implementation:
+// Schema: "Category" → Query field: "getCategorys" (get + schema name + 's')
+// Schema: "MenuItem" → Query field: "getMenuItems" (get + schema name + 's')
+// Schema: "MenuType" → Query field: "getMenuTypes" (get + schema name + 's')
 
-// QUERIES use schema name + single 's':
-query { TodoTasks(input: ...) }     // Schema "TodoTask" + 's'
-query { Products(input: ...) }      // Schema "Product" + 's'
+// ⚠️ CRITICAL: Note the lowercase 'g' and sometimes unconventional pluralization!
+// - Category → getCategorys (not getCategories!)
+// - MenuItem → getMenuItems
+// - MenuType → getMenuTypes
 
-// MUTATIONS use operation + original schema name:
-mutation { insertTodoTask(...) }    // insert + "TodoTask"
-mutation { updateProduct(...) }     // update + "Product"
+// QUERIES use "get" + schema name + 's' (lowercase 'g', direct pluralization):
+query { getCategorys(input: ...) }      // get + "Category" + 's' = getCategorys
+query { getMenuItems(input: ...) }      // get + "MenuItem" + 's' = getMenuItems
+query { getMenuTypes(input: ...) }      // get + "MenuType" + 's' = getMenuTypes
+
+// MUTATIONS use operation + original schema name (singular):
+mutation { insertCategory(...) }       // insert + "Category"
+mutation { updateCategory(...) }       // update + "Category"
+mutation { deleteCategory(...) }       // delete + "Category"
 
 // INPUT TYPES use schema name + operation + Input:
-// TodoTaskInsertInput, TodoTaskUpdateInput, TodoTaskDeleteInput
+// CategoryInsertInput, CategoryUpdateInput
+// (Selise Cloud UI shows exact type names)
+
+// 🚨 CRITICAL WARNING: The Selise Cloud UI may SHOW "getCategories" in samples,
+// but the ACTUAL working query field is "getCategorys" (with lowercase 'g' and 'ys').
+// ALWAYS test with curl or GraphQL playground to verify the exact field name!
 ```
 
-### 2. Schema Discovery with MCP
+### 2. Schema Discovery with MCP (MANDATORY FIRST STEP!)
 ```typescript
-// ALWAYS use MCP to get exact schema names first:
-// 1. list_schemas() - Shows all available schemas
-// 2. get_schema_details(schema_name) - Shows schema structure
+// 🚨 CRITICAL: ALWAYS use MCP to get exact schema names BEFORE implementing!
+// The Selise Cloud UI can show INCORRECT query field names in samples!
 
-// Example MCP workflow:
-// list_schemas() → returns ["TodoTask", "Product", "User"]
-// Then apply naming patterns:
-// - Query: TodoTasks, Products, Users (add 's')
-// - Mutations: insertTodoTask, updateProduct, deleteUser
+// Step 1: List all schemas
+list_schemas()
+// Returns: ["Category", "MenuItem", "MenuType"]
+
+// Step 2: Get schema details to see fields
+get_schema_details("Category")
+// Returns: schema structure with fields like Name, Description, etc.
+
+// Step 3: Apply naming pattern (lowercase 'get' + SchemaName + 's'):
+// Schema: "Category" → Query: "getCategorys" (NOT "getCategories"!)
+// Schema: "MenuItem" → Query: "getMenuItems"
+// Schema: "MenuType" → Query: "getMenuTypes"
+
+// Step 4: VERIFY with curl or GraphQL playground before coding!
+// Don't trust the Selise Cloud UI samples - they may show wrong names!
+
+// 🚨 DEBUGGING WORKFLOW when query field name is wrong:
+// 1. MCP: list_schemas() to confirm schema name
+// 2. Try: get + schemaName + s (lowercase 'g')
+// 3. Test with curl or GraphQL playground
+// 4. Look for GraphQL autocomplete suggestions
+// 5. Check error message - "variables not used" = wrong field name
 ```
 
-### 3. MongoDB Filter Syntax
+### 3. MongoDB Filter Syntax (CRITICAL - _id vs ItemId)
 ```typescript
-// ALWAYS use _id field for filtering, NOT ItemId:
-const filter = JSON.stringify({ _id: "record-123" });
+// 🚨 CRITICAL: Use _id for mutation filters, even though you can't query it!
+// - Queries CANNOT return _id or id fields (they don't exist in GraphQL schema)
+// - Mutations MUST use _id in MongoDB filter (it's the actual MongoDB _id field)
+// - ItemId is returned by queries but is NOT the same as MongoDB's _id
+// - HOWEVER: ItemId VALUE equals MongoDB's _id VALUE, so use ItemId's value in _id filter!
+
+// ✅ CORRECT PATTERN:
+// 1. Query returns ItemId: "18d87139-4d59-4d45-9e9b-afc81db8a620"
+// 2. Pass ItemId VALUE to mutation
+// 3. Use it in filter as _id: { _id: "18d87139-4d59-4d45-9e9b-afc81db8a620" }
+
+// For mutations (update/delete):
+const filter = JSON.stringify({ _id: itemId });  // itemId is the VALUE from ItemId field
+
+// ❌ WRONG - This will NOT find records:
+const filter = JSON.stringify({ ItemId: itemId });  // totalImpactedData will be 0
 
 // Complex filters:
 const filter = JSON.stringify({
@@ -53,11 +95,20 @@ const filter = JSON.stringify({
 });
 ```
 
-### 3. Response Structure
+### 4. Response Structure
 ```typescript
 // graphqlClient returns data directly (no 'data' wrapper):
 const result = await graphqlClient.query({...});
-// Access: result.[schema]ss.items (note the double s)
+
+// Access: result.[queryFieldName].items
+// Remember: query field = get + SchemaName + s (lowercase 'g')
+// Examples:
+// - result.getCategorys.items (NOT getCategories!)
+// - result.getMenuItems.items
+// - result.getMenuTypes.items
+
+// ⚠️ The query field name matches what you used in the GraphQL query!
+// If your query says "getCategorys", response has "getCategorys"
 ```
 
 ## Implementation Pattern
@@ -69,13 +120,16 @@ const result = await graphqlClient.query({...});
 import { graphqlClient } from 'lib/graphql-client';  // NEVER use @apollo/client!
 ```
 
-### Step 2: Define Queries (Double Plural)
+### Step 2: Define Queries (Using "get" prefix - lowercase 'g')
 
 ```typescript
-// List query - schema name + 's' (get schema name from MCP first)
+// List query - "get" + schema name + 's' (lowercase 'g', direct +s pluralization)
+// 🚨 CRITICAL: Check Selise Cloud GraphQL playground for EXACT field name!
+// UI may show "getCategories" but actual field is "getCategorys"
+
 export const GET_ITEMS_QUERY = `
   query GetItems($input: DynamicQueryInput) {
-    [SchemaName]s(input: $input) {  // e.g., TodoTasks, Products
+    getCategorys(input: $input) {  // VERIFIED WORKING: getCategorys (lowercase g, +ys)
       hasNextPage
       hasPreviousPage
       totalCount
@@ -83,8 +137,9 @@ export const GET_ITEMS_QUERY = `
       pageSize
       pageNo
       items {
+        // ⚠️ CANNOT include _id or id fields - they don't exist in GraphQL schema!
         // Standard Selise fields:
-        ItemId
+        ItemId          // ← Use this for identifying records
         CreatedDate
         CreatedBy
         LastUpdatedDate
@@ -94,20 +149,31 @@ export const GET_ITEMS_QUERY = `
         OrganizationIds
         Tags
         DeletedDate
-        // Your custom fields from schema
+
+        // Your custom fields from schema:
+        Name
+        Description
+        DisplayOrder
+        IsActive
+        // ... other custom fields
       }
     }
   }
 `;
+
+// For other schemas, replace "getCategorys" with:
+// - getMenuItems (for MenuItem schema)
+// - getMenuTypes (for MenuType schema)
+// - etc.
 ```
 
-### Step 3: Define Mutations (Original Name)
+### Step 3: Define Mutations (Singular Schema Name)
 
 ```typescript
-// Insert - uses insert + original schema name
+// Insert - uses insert + singular schema name
 export const INSERT_ITEM_MUTATION = `
   mutation InsertItem($input: [SchemaName]InsertInput!) {
-    insert[SchemaName](input: $input) {  // e.g., insertTodoTask, insertProduct
+    insert[SchemaName](input: $input) {  // e.g., insertCategory, insertMenuItem
       itemId
       totalImpactedData
       acknowledged
@@ -115,7 +181,7 @@ export const INSERT_ITEM_MUTATION = `
   }
 `;
 
-// Update - uses filter + input
+// Update - uses filter + input (note: filter is stringified MongoDB query)
 export const UPDATE_ITEM_MUTATION = `
   mutation UpdateItem($filter: String!, $input: [SchemaName]UpdateInput!) {
     update[SchemaName](filter: $filter, input: $input) {
@@ -126,12 +192,13 @@ export const UPDATE_ITEM_MUTATION = `
   }
 `;
 
-// Delete - filter only
+// Delete - uses filter (note: filter is stringified MongoDB query)
 export const DELETE_ITEM_MUTATION = `
-  mutation DeleteItem($filter: String!, $input: [SchemaName]DeleteInput!) {
-    delete[SchemaName](filter: $filter, input: $input) {
+  mutation DeleteItem($filter: String!) {
+    delete[SchemaName](filter: $filter) {
       acknowledged
       totalImpactedData
+      itemId
     }
   }
 `;
@@ -176,8 +243,8 @@ export const getItemById = async (itemId: string) => {
     },
   }) as any;
   
-  // Check if found (schema name + 's')
-  const queryFieldName = `${schemaName}s`; // e.g., "TodoTasks"
+  // Check if found (use "get" + schema name pluralized)
+  const queryFieldName = `get${schemaName}s`; // e.g., "getCategories", "getMenuItems"
   if (result?.[queryFieldName]?.items?.length > 0) {
     return {
       data: {
@@ -185,7 +252,7 @@ export const getItemById = async (itemId: string) => {
       }
     };
   }
-  
+
   // Return empty result if not found
   return {
     data: {
@@ -349,26 +416,80 @@ export const useDeleteItem = () => {
 
 ## Common Gotchas & Solutions
 
-### 1. Wrong Schema Names in Queries
+### 1. Wrong Schema Names in Queries (MOST COMMON ERROR!)
 ```typescript
-// ❌ WRONG - Using schema name without 's'
-query { TodoTask(input: ...) }  // Missing 's'
+// ❌ WRONG - Using schema name without "get" prefix
+query { Categories(input: ...) }  // Missing "get" prefix
+query { Category(input: ...) }    // Singular form
+query { Categorys(input: ...) }   // Missing "get" prefix
 
-// ✅ CORRECT - Schema name + single 's'
-query { TodoTasks(input: ...) }
+// ❌ WRONG - Uppercase 'G' (from Selise Cloud UI samples)
+query { getCategories(input: ...) }  // Shows in UI but doesn't work!
 
-// ALWAYS use MCP to get exact schema names:
-list_schemas()  // Shows actual schema names like "TodoTask", "Product"
-get_schema_details("TodoTask")  // Shows schema structure
+// ✅ CORRECT - lowercase "get" + schema name + 's'
+query { getCategorys(input: ...) }   // VERIFIED WORKING!
+query { getMenuItems(input: ...) }
+query { getMenuTypes(input: ...) }
+
+// 🚨 CRITICAL: The Selise Cloud UI GraphQL samples show "getCategories" (uppercase G)
+// but the ACTUAL working field is "getCategorys" (lowercase g)!
+// ALWAYS test the exact field name in GraphQL playground!
+
+// ⚠️ DEBUGGING TIP: If you get "Field does not exist on type Query":
+// 1. Try lowercase 'g': getCategorys instead of getCategories
+// 2. Try direct +s pluralization: getCategorys instead of getCategories
+// 3. Check GraphQL playground for autocomplete suggestions
+// 4. The error "variables were not used: input" often means wrong field name
+
+// ALWAYS verify exact schema names:
+list_schemas()  // Shows: "Category", "MenuItem", "MenuType"
+// Then apply pattern: get + schemaName + s (lowercase!)
 ```
 
-### 2. Wrong Filter Field
+### 2. Wrong Filter Field (CRITICAL FOR UPDATE/DELETE!)
 ```typescript
-// ❌ WRONG - ItemId doesn't work for filtering
-const filter = JSON.stringify({ ItemId: "123" });
+// ❌ WRONG - ItemId doesn't work for filtering in mutations
+const filter = JSON.stringify({ ItemId: "18d87139-4d59-4d45-9e9b-afc81db8a620" });
+// Result: totalImpactedData: 0 (no records found/updated/deleted)
 
-// ✅ CORRECT - Use _id for MongoDB
-const filter = JSON.stringify({ _id: "123" });
+// ❌ WRONG - Trying to use _id or id in queries
+query {
+  getCategorys(input: $input) {
+    items {
+      _id   // ❌ Error: Field `_id` does not exist on type `Category`
+      id    // ❌ Error: Field `id` does not exist on type `Category`
+    }
+  }
+}
+
+// ✅ CORRECT - Use ItemId in queries (for display/identification)
+query {
+  getCategorys(input: $input) {
+    items {
+      ItemId  // ✅ This works and returns the record ID
+      Name
+      // ... other fields
+    }
+  }
+}
+
+// ✅ CORRECT - Use _id in mutation filters with ItemId's VALUE
+// Step 1: Get ItemId from query result
+const category = result.getCategorys.items[0];
+const itemId = category.ItemId; // "18d87139-4d59-4d45-9e9b-afc81db8a620"
+
+// Step 2: Use that VALUE in _id filter for mutations
+const filter = JSON.stringify({ _id: itemId }); // ← Use _id key, ItemId value!
+
+// Step 3: Execute mutation
+await updateCategory({ filter, input: {...} });
+// Result: totalImpactedData: 1 ✅ (record found and updated!)
+
+// 🚨 KEY INSIGHT:
+// - GraphQL schema doesn't expose _id field for queries
+// - But MongoDB internally uses _id as primary key
+// - ItemId VALUE = MongoDB _id VALUE
+// - So: query with ItemId, filter mutations with _id using ItemId's value
 ```
 
 ### 3. Apollo Client Import
@@ -384,10 +505,15 @@ import { graphqlClient } from 'lib/graphql-client';
 ### 4. Response Structure Confusion
 ```typescript
 // ❌ WRONG - graphqlClient doesn't wrap in 'data'
-const items = result.data.TodoTasks.items;
+const items = result.data.getCategories.items;
 
-// ✅ CORRECT - Direct access with proper field name
-const items = result.TodoTasks.items;
+// ❌ WRONG - Missing "get" prefix
+const items = result.Categories.items;
+
+// ✅ CORRECT - Direct access with proper field name (get + pluralized schema name)
+const items = result.getCategories.items;
+const menuItems = result.getMenuItems.items;
+const menuTypes = result.getMenuTypes.items;
 ```
 
 ### 5. Mutation Response Check
@@ -398,6 +524,41 @@ if (result.totalImpactedData === 0) {
   // No records were updated - filter didn't match
   throw new Error('Item not found');
 }
+```
+
+### 6. Form Validation with Null Values (React Hook Form + Zod)
+```typescript
+// ❌ PROBLEM: GraphQL returns null for optional fields, but Zod expects string or undefined
+// Error: "Expected string, received null" when editing records with null optional fields
+
+// ❌ WRONG - Passing null to form
+const form = useForm({
+  defaultValues: {
+    Name: initialData?.Name || '',
+    Description: initialData?.Description,  // ← Could be null!
+  }
+});
+
+// ✅ CORRECT - Convert null to empty string
+const form = useForm({
+  defaultValues: {
+    Name: initialData?.Name || '',
+    Description: initialData?.Description || '',  // ← null becomes ''
+    // This satisfies Zod's string.optional() validation
+  }
+});
+
+// Zod schema for optional fields:
+const schema = z.object({
+  Name: z.string().min(2),
+  Description: z.string().max(500).optional(),  // Accepts '' or undefined, NOT null
+});
+
+// 🚨 KEY INSIGHT:
+// - GraphQL/MongoDB returns null for empty optional fields
+// - React Hook Form passes these as null to Zod
+// - Zod's .optional() accepts undefined or string, NOT null
+// - Solution: Convert null to '' in defaultValues (|| '')
 ```
 
 ## Testing with curl Requests (MANDATORY Safety Check)
@@ -587,12 +748,33 @@ src/features/[feature]/
 └── index.ts           # Public exports
 ```
 
-## Summary
+## Summary - Complete Workflow for ANY Schema
 
-1. **ALWAYS get schema names from MCP first** using list_schemas() and get_schema_details()
-2. **Query fields**: Schema name + single 's' (TodoTask → TodoTasks)
-3. **Mutations**: operation + schema name (insertTodoTask, updateTodoTask)
-4. **Input types**: SchemaName + Operation + Input (TodoTaskInsertInput)
-5. **Filter with _id**, not ItemId for MongoDB queries
-6. **Import graphqlClient**, never Apollo
-7. **Follow this recipe**, not inventory feature patterns
+### Before You Code (MANDATORY):
+1. **Use MCP to discover schemas**: `list_schemas()` and `get_schema_details("SchemaName")`
+2. **Verify query field name**: Test with curl or GraphQL playground (UI samples can be WRONG!)
+3. **Expected pattern**: lowercase "get" + SchemaName + "s" (e.g., getCategorys, getMenuItems)
+
+### Critical Patterns (VERIFIED WORKING):
+1. **Query fields**: `getCategorys`, `getMenuItems`, `getMenuTypes` (lowercase 'g', direct +s)
+   - ⚠️ NOT getCategories (uppercase G) - UI shows this but it's WRONG!
+2. **Mutations**: `insertCategory`, `updateCategory`, `deleteCategory` (singular schema name)
+3. **Query field access**: `result.getCategorys.items` (NO _id or id fields in queries!)
+4. **Mutation filters**: Use `{ _id: itemIdValue }` where itemIdValue comes from ItemId field
+5. **ItemId vs _id**:
+   - Queries return: `ItemId` field
+   - Mutations filter by: `_id` field (using ItemId's VALUE)
+   - ItemId VALUE = MongoDB _id VALUE
+6. **Form validation**: Convert null to `''` for optional fields in React Hook Form defaultValues
+7. **Import**: `graphqlClient` from 'lib/graphql-client' (NEVER Apollo Client!)
+8. **Check mutations**: `totalImpactedData > 0` means success, `= 0` means filter didn't match
+
+### This Document is Now Complete For:
+- ✅ Any schema created via MCP
+- ✅ Any CRUD operation (Create, Read, Update, Delete)
+- ✅ Handling query field name variations
+- ✅ Proper _id vs ItemId usage
+- ✅ Form validation with null values
+- ✅ All common errors and their solutions
+
+**Just follow the MCP → Verify → Implement pattern and you're good!**
