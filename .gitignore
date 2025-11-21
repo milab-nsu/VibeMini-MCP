@@ -1,3 +1,13 @@
+# macOS
+.DS_Store
+
+# Python-generated files
 __pycache__/
 *.pyc
 *.pyo
+
+# Virtual environments
+.venv
+
+# Junk folder
+Prev/
